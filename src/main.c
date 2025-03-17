@@ -1,7 +1,7 @@
 #include <version.h>
 
 #if ZEPHYR_VERSION_CODE >= ZEPHYR_VERSION(3,1,0)
-#include <zephyr/zephyr.h>
+#include <zephyr/kernel.h>
 #include <zephyr/device.h>
 #include <zephyr/devicetree.h>
 #include <zephyr/drivers/gpio.h>
@@ -39,11 +39,11 @@ void timer_callback(rcl_timer_t * timer, int64_t last_call_time)
 	}
 }
 
-void main(void)
+int main(void)
 {
 	rmw_uros_set_custom_transport(
 		MICRO_ROS_FRAMING_REQUIRED,
-		(void *) DEVICE_DT_GET(DT_ALIAS(uros_serial_port)),
+		(void *) &default_params,
 		zephyr_transport_open,
 		zephyr_transport_close,
 		zephyr_transport_write,
@@ -91,4 +91,5 @@ void main(void)
 	// free resources
 	RCCHECK(rcl_publisher_fini(&publisher, &node))
 	RCCHECK(rcl_node_fini(&node))
+  return 0;    
 }
