@@ -1,16 +1,56 @@
-/*Added these lines for compability with Zephyr v2.7*/
-zephyr_udc0: &usbotg_fs {
-	pinctrl-0 = <&usb_otg_fs_dm_pa11 &usb_otg_fs_dp_pa12
-		     &usb_otg_fs_id_pa10>;
-	pinctrl-names = "default";
-	status = "okay";
+#include <zephyr/dt-bindings/led/led.h>
+
+&spi3 {
+	/* Workaround to support WS2812 driver */
+	line-idle-low;
+
+	led_strip: ws2812@0 {
+		compatible = "worldsemi,ws2812-spi";
+
+		/* SPI */
+		reg = <0>; /* ignored, but necessary for SPI bindings */
+		spi-max-frequency = <6400000>;
+
+		/* WS2812 */
+		chain-length = <1>; /* arbitrary; change at will */
+		spi-cpha;
+		spi-one-frame = <0xf0>; /* 11110000: 625 ns high and 625 ns low */
+		spi-zero-frame = <0xc0>; /* 11000000: 312.5 ns high and 937.5 ns low */
+		color-mapping = <LED_COLOR_ID_GREEN
+				 LED_COLOR_ID_RED
+				 LED_COLOR_ID_BLUE>;
+	};
 };
-/* End of compability part */
 
+&pinctrl {
+	spim3_default: spim3_default {
+		group2 {
+			pinmux = <SPIM3_MOSI_GPIO48>;
+		};
+	};
+};
 
-&zephyr_udc0 {
-	cdc_acm_uart0: cdc_acm_uart0 {
-		compatible = "zephyr,cdc-acm-uart";   
-                label = "CDC_ACM_0";
-        };
+&uart0 {
+	current-speed = <115200>;
+};
+
+&usb_serial {
+	status = "okay";
+	current-speed = <460800>;
+};
+
+/ {
+	aliases {
+		led-strip = &led_strip;
+		stepper = &pitch;
+	};
+
+	pitch: tmc2209 {
+		compatible = "adi,tmc2209";
+		en-gpios = <&gpio0 7 GPIO_ACTIVE_HIGH>;
+		step-gpios = <&gpio0 6 GPIO_ACTIVE_HIGH>;
+		dir-gpios = <&gpio0 5 GPIO_ACTIVE_HIGH>;
+		//dual-edge-step;
+		micro-step-res = <16>;
+	};
 };
