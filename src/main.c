@@ -21,6 +21,8 @@ LOG_MODULE_REGISTER(main);
 #include <std_msgs/msg/int32.h>
 #include <std_msgs/msg/float32.h>
 #include <std_msgs/msg/float32_multi_array.h>
+#include <vermin_collector_ros_msgs/msg/command.h>
+#include <vermin_collector_ros_msgs/msg/feedback.h>
 
 
 #include <rclc/rclc.h>

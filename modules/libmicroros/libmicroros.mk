@@ -94,6 +94,7 @@ $(COMPONENT_PATH)/micro_ros_src/src:
 	git clone -b jazzy https://github.com/ros2/ros2_tracing src/ros2_tracing; \
 	git clone -b jazzy https://github.com/micro-ROS/micro_ros_utilities src/micro_ros_utilities; \
 	git clone -b jazzy https://github.com/ros2/rosidl_core src/rosidl_core; \
+	git clone https://phabricator.ict.tuwien.ac.at/source/Vermin_Collector_ROS_Msgs.git src/vermin_collector_ros_msgs; \
 	touch src/ros2_tracing/test_tracetools/COLCON_IGNORE; \
 	touch src/ros2_tracing/lttngpy/COLCON_IGNORE; \
     touch src/rosidl/rosidl_typesupport_introspection_cpp/COLCON_IGNORE; \
