@@ -49,6 +49,10 @@ $> cd zephyr-sdk-0.16.9-rc3_linux-x86_64
 $> ./setup.sh
 ```
 
+### zephyr source code changes
+The ESP32 has no explicit top-value for its counters but uses some kind of alarm functionality instead. However, due to this, the standard counter-functionality implemented in the TMC2209 driver functions a little peculiar. Even though, it should function as the esp32-vendor has adapted its own code so that setting a top-value is redirected to implementing an alarm, the next difference is that esp32-timers do not simply start from zero once the alarm is triggered which may lead to strange behaviour and weird debug-logs on the zephyr monitor. Therefore, the source code must be adapted a little. In particular, the twor files ./code_adaptions/step_dir_stepper_counter_timing.c and ./code_adaptions/step_dir_stepper_common.h must be placed inside zephyr_4_2/zephyr/drivers/stepper/step_dir and replace the equally named files there.
+
+
 ### Activate zephyr environment
 Once everything is installed, the follwoing commands should activate your environment allowing you to build and flash zephyr code onto the esp32:
 

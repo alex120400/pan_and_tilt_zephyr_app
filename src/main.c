@@ -30,13 +30,40 @@ LOG_MODULE_REGISTER(main);
 #include <rmw_microros/rmw_microros.h>
 #include <microros_transports.h>
 
-#define TIMER_FREQ 40000000 // 40MHz
+
+
+/* #################################### uROS preparation steps #################################### */
+#define RCCHECK(fn) {                                                                    \
+		rcl_ret_t temp_rc = fn;                                                          \
+		if ((temp_rc != RCL_RET_OK)) {                                                   \
+			printf("Failed status on line %d: %d. Aborting.\n", __LINE__, (int)temp_rc); \
+			while(1);                                                                    \
+		}																				 \
+	}
+#define RCSOFTCHECK(fn) {                                                                                           \
+		rcl_ret_t temp_rc = fn;                                                                                     \
+		if ((temp_rc != RCL_RET_OK)) printf("Failed status on line %d: %d. Continuing.\n", __LINE__, (int)temp_rc); \
+	}
+
+// publisher & its variables
+rcl_publisher_t feedback_pub;
+vermin_collector_ros_msgs__msg__Feedback feedback_msg;
+
+uint8_t current_state = vermin_collector_ros_msgs__msg__Feedback__CONFIGURING; // synchronous for all steppers
+int32_t current_steps[3] = {0, 0, 0};
+uint32_t current_frequency = 1000; // 1 kHz, sychronous for all steppers
+enum stepper_micro_step_resolution current_res = STEPPER_MICRO_STEP_16; // synchronous for all steppers
+
+// subscriber & its variables
+rcl_subscription_t command_sub;
+vermin_collector_ros_msgs__msg__Command command_msg;
+
+
+
+/* #################################### Stepper preparation steps #################################### */
+// #define TIMER_FREQ 40000000 // 40MHz
 #define FREQ_FROM_INTV(intv_ns) (1000000000.0 / intv_ns)
 #define INTV_FROM_FREQ(freq_hz) (1000000000.0 / freq_hz)
-
-#define STRIP_NODE DT_ALIAS(led_strip)
-static const struct device *const strip = DEVICE_DT_GET(STRIP_NODE);
-
 
 // define stepper devices, related semaphores and idx as structs
 typedef struct {
@@ -55,8 +82,8 @@ K_SEM_DEFINE(pitch_steps_completed_sem, 1, 1); // first 1 allows to enter semaph
 K_SEM_DEFINE(yaw_steps_completed_sem, 1, 1);
 K_SEM_DEFINE(slide_steps_completed_sem, 1, 1);
 
-void init_steppers(void)
-{
+void init_steppers(void){
+	// fill steppers list
     steppers[PITCH_IDX] = (stepper_ctx_t){
         .dev = DEVICE_DT_GET(DT_ALIAS(pitch_stepper)),
         .sem = &pitch_steps_completed_sem,
@@ -77,53 +104,58 @@ void init_steppers(void)
         .idx = SLIDE_IDX,
 		.name = "SLIDE"
     };
+
+	// check devices and set default values
+	for (uint8_t stepper_idx = 0; stepper_idx < 3; stepper_idx++){
+		if (!device_is_ready(steppers[stepper_idx].dev)){
+			printk("Device %s is not ready\n", steppers[stepper_idx].name);
+			return -ENODEV;
+		}
+		printk("stepper is %p, name is %s\n", steppers[stepper_idx].dev, steppers[stepper_idx].name);
+	
+		stepper_set_event_callback(steppers[stepper_idx].dev, stepper_callback, &steppers[stepper_idx]);
+		stepper_set_reference_position(steppers[stepper_idx].dev, 0);
+		stepper_set_micro_step_res(steppers[stepper_idx].dev, current_res);
+		stepper_set_microstep_interval(steppers[stepper_idx].dev, INTV_FROM_FREQ(current_frequency));
+		stepper_enable(steppers[stepper_idx].dev);	
+	}
 }
 
 
-// publisher & its variables: initilization
-rcl_publisher_t feedback_pub;
-vermin_collector_ros_msgs__msg__Feedback feedback_msg;
 
-uint8_t current_state = vermin_collector_ros_msgs__msg__Feedback__CONFIGURING; // synchronous for all steppers
-int32_t current_steps[3] = {0, 0, 0};
-uint32_t current_frequency = 1000; // 1 kHz, sychronous for all steppers
-enum stepper_micro_step_resolution current_res = STEPPER_MICRO_STEP_16; // synchronous for all steppers
+/* #################################### LED-strip preparation steps #################################### */
+#define STRIP_NODE DT_ALIAS(led_strip)
+#define LED_BRIGHTNESS 20
+#define STRIP_NUM_PIXELS 1
+#define RGB(_r, _g, _b) { .r = (_r), .g = (_g), .b = (_b) }
+#define STATE_READY 0
+#define STATE_CONFIGURING 1
+#define STATE_MOVING 2
+#define STATE_CALIBRATING 3
+static const struct device *const strip = DEVICE_DT_GET(STRIP_NODE);
 
+static struct led_rgb colors[] = {
+	RGB(LED_BRIGHTNESS, LED_BRIGHTNESS, LED_BRIGHTNESS), /* white */
+	RGB(LED_BRIGHTNESS, 0x00, 0x00), /* red */
+	RGB(0x00, LED_BRIGHTNESS, 0x00), /* green */
+	RGB(0x00, 0x00, LED_BRIGHTNESS), /* blue */
+};
 
-// subscriber & its variables: initialization
-rcl_subscription_t command_sub;
-vermin_collector_ros_msgs__msg__Command command_msg;
-
-
-#define RCCHECK(fn)                                                                      \
-	{                                                                                    \
-		rcl_ret_t temp_rc = fn;                                                          \
-		if ((temp_rc != RCL_RET_OK))                                                     \
-		{                                                                                \
-			printf("Failed status on line %d: %d. Aborting.\n", __LINE__, (int)temp_rc); \
-			for (;;)                                                                     \
-			{                                                                            \
-			};                                                                           \
-		}                                                                                \
+void init_led(void){
+	if (device_is_ready(strip)){
+		LOG_INF("Found LED strip device %s", strip->name);
 	}
-#define RCSOFTCHECK(fn)                                                                    \
-	{                                                                                      \
-		rcl_ret_t temp_rc = fn;                                                            \
-		if ((temp_rc != RCL_RET_OK))                                                       \
-		{                                                                                  \
-			printf("Failed status on line %d: %d. Continuing.\n", __LINE__, (int)temp_rc); \
-		}                                                                                  \
-	}
+	led_strip_update_rgb(strip, &colors[STATE_CONFIGURING], STRIP_NUM_PIXELS);
+}
 
 
-void timer_callback(rcl_timer_t *timer, int64_t last_call_time)
-{
+/* #################################### Callback definitions #################################### */
+void timer_callback(rcl_timer_t *timer, int64_t last_call_time){ // used to publish Feedback regularly
 	RCLC_UNUSED(last_call_time);
-	if (timer != NULL)
-	{	
+	if (timer != NULL){	
 		// get current data
 		// frequency is updated in Setup routine as there is no get-method
-		// state is updated at start and end of each routine	
+		// state is updated at start and end of each routine (Target, Setup, Homeing)	
 		stepper_get_micro_step_res(steppers[PITCH_IDX].dev, &current_res);
 		stepper_get_actual_position(steppers[PITCH_IDX].dev, &current_steps[PITCH_IDX]);
 		stepper_get_actual_position(steppers[YAW_IDX].dev, &current_steps[YAW_IDX]);
@@ -141,9 +173,7 @@ void timer_callback(rcl_timer_t *timer, int64_t last_call_time)
 	}
 }
 
-
-void command_callback(const void *msgin)
-{	// handles subscription to new incoming command
+void command_callback(const void *msgin){	// handles subscription to new incoming command
 	const vermin_collector_ros_msgs__msg__Command *msg = msgin;
 	LOG_INF("Received Command of type: %d\n0..SETUP, 1..TARGET, 2..HOMING\n", msg->command_type);
 
@@ -157,26 +187,23 @@ void command_callback(const void *msgin)
 	stepper_move_by(steppers[SLIDE_IDX].dev, 100);
 }
 
-
-
-void stepper_callback(const struct device *dev, const enum stepper_event event, void *user_data)
-{
+void stepper_callback(const struct device *dev, const enum stepper_event event, void *user_data){
 	stepper_ctx_t *ctx = (stepper_ctx_t *)user_data;
-
-	switch (event)
-	{
+	switch (event){
 	case STEPPER_EVENT_STEPS_COMPLETED:
 		k_sem_give(ctx->sem);
 		printk("Steps completed on stepper: %s\n", ctx->name);
-
 		break;
 	default:
 		break;
 	}
 }
 
-int main(void)
-{
+
+
+/* #################################### main loop #################################### */
+int main(void){
+	// steup serial transport
 	rmw_uros_set_custom_transport(
 		MICRO_ROS_FRAMING_REQUIRED,
 		(void *)&default_params,
@@ -188,8 +215,9 @@ int main(void)
 	rcl_allocator_t allocator = rcl_get_default_allocator();
 	rclc_support_t support;
 
+
 	// create init_options
-	// RCCHECK(rclc_support_init(&support, 0, NULL, &allocator));
+	// RCCHECK(rclc_support_init(&support, 0, NULL, &allocator)); -> fails with ubuntu wsl
 	// workaround since reset disconnects serial port from ubuntu wsl, wait till its back
 	rcl_ret_t ret;
 	do {
@@ -200,9 +228,11 @@ int main(void)
     	}
 	} while (ret != RCL_RET_OK);
 
+
 	// create node
 	rcl_node_t node;
 	RCCHECK(rclc_node_init_default(&node, "zephyr_esp32_stepper_manager", "", &support));
+
 
 	// create publisher
 	RCCHECK(rclc_publisher_init_default(
@@ -210,6 +240,7 @@ int main(void)
 		&node,
 		ROSIDL_GET_MSG_TYPE_SUPPORT(vermin_collector_ros_msgs, msg, Feedback),
 		"ESP32_Feedback"));
+
 
 	// create timer for feedback publication
 	rcl_timer_t timer;
@@ -228,6 +259,7 @@ int main(void)
 		ROSIDL_GET_MSG_TYPE_SUPPORT(vermin_collector_ros_msgs, msg, Command),
 		"ESP32_Command"));
 
+
 	// create executor
 	rclc_executor_t executor;
 	// 2 is number of handles = subscriptions + timers
@@ -241,43 +273,17 @@ int main(void)
 		command_callback,
 		ON_NEW_DATA));
 
-	// init led-strip
-	if (device_is_ready(strip))
-	{
-		LOG_INF("Found LED strip device %s", strip->name);
-	}
-	struct led_rgb color[] = {{0, 1, 0}};
-	int rc = led_strip_update_rgb(strip, color, 1);
-	if (rc)
-	{
-		LOG_ERR("couldn't update strip: %d", rc);
-	}
-
-
-	// check stepper devices
+	
+	// init peripherial devices
+	init_led();
 	init_steppers();
-	for (uint8_t stepper_idx = 0; stepper_idx < 3; stepper_idx++){
-		if (!device_is_ready(steppers[stepper_idx].dev))
-		{
-			printk("Device %s is not ready\n", steppers[stepper_idx].name);
-			return -ENODEV;
-		}
-		printk("stepper is %p, name is %s\n", steppers[stepper_idx].dev, steppers[stepper_idx].name);
 	
-		stepper_set_event_callback(steppers[stepper_idx].dev, stepper_callback, &steppers[stepper_idx]);
-		stepper_set_reference_position(steppers[stepper_idx].dev, 0);
-		stepper_set_micro_step_res(steppers[stepper_idx].dev, current_res);
-		stepper_set_microstep_interval(steppers[stepper_idx].dev, INTV_FROM_FREQ(current_frequency));
-		stepper_enable(steppers[stepper_idx].dev);
-	
-	}
 
-
-	while (1)
-	{
+	while (1){
 		rclc_executor_spin_some(&executor, 100);
 		usleep(100000);
 	}
+
 
 	// free resources
 	RCCHECK(rclc_executor_fini(&executor))
@@ -287,5 +293,6 @@ int main(void)
 	RCCHECK(rcl_node_fini(&node))
 	RCCHECK(rclc_support_fini(&support))
 
+	
 	return 0;
 }
