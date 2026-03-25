@@ -31,26 +31,77 @@
 };
 
 &uart0 {
-	current-speed = <115200>;
+	current-speed = <115200>; /* baudrate for zephyr os prints/logs/monitoring */
 };
 
 &usb_serial {
 	status = "okay";
-	current-speed = <460800>;
+	current-speed = <460800>; /* baudrate for micro-ros agent */
 };
+
+
+/* timer have base frequency of 40 Mhz */
+&timer0 {
+    status = "okay";
+	/* pitch counter */
+    counter0: counter {
+        status = "okay";
+    };
+};
+
+&timer1 {
+    status = "okay";
+	/* yaw counter */
+    counter1: counter {
+        status = "okay";
+    };
+};
+
+&timer2 {
+    status = "okay";
+	/* slide counter */
+    counter2: counter {
+        status = "okay";
+    };
+};
+
 
 / {
 	aliases {
 		led-strip = &led_strip;
-		stepper = &pitch;
+		pitch-stepper = &pitch;
+		yaw-stepper = &yaw;
+		slide-stepper = &slide;
+
 	};
 
-	pitch: tmc2209 {
+	pitch: tmc2209_pitch {
 		compatible = "adi,tmc2209";
-		en-gpios = <&gpio0 7 GPIO_ACTIVE_HIGH>;
+		en-gpios = <&gpio0 7 GPIO_ACTIVE_LOW>;
 		step-gpios = <&gpio0 6 GPIO_ACTIVE_HIGH>;
 		dir-gpios = <&gpio0 5 GPIO_ACTIVE_HIGH>;
 		//dual-edge-step;
 		micro-step-res = <16>;
+		counter = <&counter0>;
+	};
+
+	yaw: tmc2209_yaw {
+		compatible = "adi,tmc2209";
+		en-gpios = <&gpio0 7 GPIO_ACTIVE_LOW>;
+		step-gpios = <&gpio0 10 GPIO_ACTIVE_HIGH>;
+		dir-gpios = <&gpio0 9 GPIO_ACTIVE_HIGH>;
+		//dual-edge-step;
+		micro-step-res = <16>;
+		counter = <&counter1>;
+	};
+
+	slide: tmc2209_slide {
+		compatible = "adi,tmc2209";
+		en-gpios = <&gpio0 7 GPIO_ACTIVE_LOW>;
+		step-gpios = <&gpio0 12 GPIO_ACTIVE_HIGH>;
+		dir-gpios = <&gpio0 11 GPIO_ACTIVE_HIGH>;
+		//dual-edge-step;
+		micro-step-res = <16>;
+		counter = <&counter2>;
 	};
 };

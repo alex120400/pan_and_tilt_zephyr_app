@@ -95,6 +95,7 @@ Follow the steps described in the Quickstart, Building and Building micro-ROS-Ag
 ### Start ros-agent in micro-ros workspace via (if built at least once before)
 ```bash
 source /opt/ros/humble/setup.bash
+cd ~/uros_ws
 source install/local_setup.sh
 ros2 run micro_ros_agent micro_ros_agent serial --dev /dev/ttyACM1 -b 460800
 ```
