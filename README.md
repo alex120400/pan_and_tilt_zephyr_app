@@ -50,7 +50,7 @@ $> ./setup.sh
 ```
 
 ### zephyr source code changes
-The ESP32 has no explicit top-value for its counters but uses some kind of alarm functionality instead. However, due to this, the standard counter-functionality implemented in the TMC2209 driver functions a little peculiar. Even though, it should function as the esp32-vendor has adapted its own code so that setting a top-value is redirected to implementing an alarm, the next difference is that esp32-timers do not simply start from zero once the alarm is triggered which may lead to strange behaviour and weird debug-logs on the zephyr monitor. Therefore, the source code must be adapted a little. In particular, the twor files ./code_adaptions/step_dir_stepper_counter_timing.c and ./code_adaptions/step_dir_stepper_common.h must be placed inside zephyr_4_2/zephyr/drivers/stepper/step_dir and replace the equally named files there.
+The ESP32 has no explicit top-value for its counters but uses some kind of alarm functionality instead. However, due to this, the standard counter-functionality implemented in the TMC2209 driver functions a little peculiar. Even though, it should function as the esp32-vendor has adapted its own code so that setting a top-value is redirected to implementing an alarm, the next difference is that esp32-timers do not simply start from zero once the alarm is triggered which may lead to strange behaviour and weird debug-logs on the zephyr monitor. Additionally, the stepper-source code seems to have changed a little in general, as only single spikes were encountered in the v4.2 instead of 50% duty cycles for step signals. Therefore, the source code must be adapted a little. In particular, the three files ./code_adaptions/step_dir_stepper_counter_timing.c, ./code_adaptions/step_dir_stepper_common.c and ./code_adaptions/step_dir_stepper_common.h must be placed inside zephyr_4_2/zephyr/drivers/stepper/step_dir and replace the equally named files there.
 
 
 ### Activate zephyr environment
@@ -122,6 +122,24 @@ ros2 interface show vermin_collector_ros_msgs/msg/Command
 ros2 interface show vermin_collector_ros_msgs/msg/Feedback
 
 ```
+
+Send a command
+```bash
+ros2 topic pub --once /ESP32_Command vermin_collector_ros_msgs/msg/Command "{
+  command_type: 1,
+  step_goals: [32000, 0, 0],
+  laser_duration_ms: 0,
+  star_diameter: 0,
+  resolution: 64,
+  frequency: 1
+}"
+```
+
+Listen to feedback
+```bash
+ros2 topic echo /ESP32_Feedback
+```
+
 
 ## License
 
