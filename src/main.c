@@ -112,6 +112,24 @@ static struct led_rgb colors[] = {
 };
 
 
+/* #################################### External LED & Button for Tests preparation step #################################### */
+static const struct gpio_dt_spec led = GPIO_DT_SPEC_GET(DT_ALIAS(my_led), gpios);
+static const struct gpio_dt_spec btn = GPIO_DT_SPEC_GET(DT_ALIAS(my_button), gpios);
+static struct gpio_callback btn_cb_data;
+
+// GPIO callback (ISR)
+void button_isr(const struct device *dev,
+                struct gpio_callback *cb,
+                uint32_t pins)
+{
+    // Check if the correct button was pressed
+    if (BIT(btn.pin) & pins) {
+        gpio_pin_toggle_dt(&led);
+    }
+}
+
+
+
 
 /* #################################### Callback definitions #################################### */
 void timer_callback(rcl_timer_t *timer, int64_t last_call_time){ // used to publish Feedback regularly
@@ -154,6 +172,7 @@ void command_callback(const void *msgin){	// handles subscription to new incomin
 
 void stepper_callback(const struct device *dev, const enum stepper_event event, void *user_data){
 	stepper_ctx_t *ctx = (stepper_ctx_t *)user_data;
+	LOG_INF("Event %d occured on stepper: %s\n", event, ctx->name);
 	switch (event){
 	case STEPPER_EVENT_STEPS_COMPLETED:
 		k_sem_give(ctx->sem);
@@ -290,6 +309,7 @@ void simple_target(vermin_collector_ros_msgs__msg__Command *cmd){
 
 void move_and_wait(stepper_ctx_t *ctx, int32_t steps){
 	k_sem_reset(ctx->sem); // make sure semaphore is 0 right now
+	LOG_INF("Moving stepper: %s\n", ctx->name);
     stepper_move_by(ctx->dev, steps);
     k_sem_take(ctx->sem, K_FOREVER);   // take semaphore and wait till movement is finished, this will block here since semaphore are 0-initialized
 }
@@ -387,6 +407,31 @@ int main(void){
 	// init peripherial devices
 	init_led();
 	init_steppers();
+
+
+	// external peripherals for testing
+	int ret_led, ret_btn;
+	if ((!gpio_is_ready_dt(&led)) || (!gpio_is_ready_dt(&btn))) {
+        printk("ERROR: blue led or button not ready\r\n");
+		return 0;
+	}
+
+	ret_led = gpio_pin_configure_dt(&led, GPIO_OUTPUT_ACTIVE);
+	ret_btn = gpio_pin_configure_dt(&btn, GPIO_INPUT);
+    if ((ret_led < 0) || (ret_btn<0)) {
+        printk("ERROR: could not set button as input or led as output\r\n");
+        return 0;
+    }
+
+    ret_btn = gpio_pin_interrupt_configure_dt(&btn, GPIO_INT_EDGE_TO_ACTIVE); // Configure the interrupt
+    if (ret_btn < 0) {
+        printk("ERROR: could not configure button as interrupt source\r\n");
+        return 0;
+    }
+
+    gpio_init_callback(&btn_cb_data, button_isr, BIT(btn.pin)); // Connect callback function (ISR) to interrupt source
+    gpio_add_callback(btn.port, &btn_cb_data);
+
 
 
 	// steup serial transport

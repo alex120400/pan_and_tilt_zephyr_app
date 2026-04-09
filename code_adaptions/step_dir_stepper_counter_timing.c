@@ -46,6 +46,7 @@ static void step_counter_alarm_interrupt(const struct device *counter_dev,
     };
 	
     counter_set_channel_alarm(config->counter, 0, &alarm_cfg);
+	LOG_INF("Exiting Alarm callback");
 }
 // change end
 

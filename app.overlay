@@ -72,7 +72,25 @@
 		pitch-stepper = &pitch;
 		yaw-stepper = &yaw;
 		slide-stepper = &slide;
+		my-button = &sw1;
+		my-led = &led_blue;
 
+	};
+
+	buttons {
+		compatible = "gpio-keys";
+
+		sw1: d2 {
+			gpios = <&gpio0 13 GPIO_ACTIVE_LOW>;	
+		};
+
+	};
+
+	leds {
+		compatible = "gpio-leds";
+		led_blue: d13 {
+			gpios = <&gpio0 14 GPIO_ACTIVE_HIGH>;
+		};
 	};
 
 	pitch: tmc2209_pitch {
