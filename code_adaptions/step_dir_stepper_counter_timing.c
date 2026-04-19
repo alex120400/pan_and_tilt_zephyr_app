@@ -29,10 +29,11 @@ static void step_counter_alarm_interrupt(const struct device *counter_dev,
     ARG_UNUSED(counter_dev);
     ARG_UNUSED(chan_id);
     ARG_UNUSED(ticks);
-	LOG_INF("Entered Alarm callback");
     struct step_dir_stepper_common_data *data = user_data;
     const struct device *dev = data->dev;
     const struct step_dir_stepper_common_config *config = dev->config;
+
+	int err = 0;
 
     /* generate step pulse */
     stepper_handle_timing_signal(dev);
@@ -45,8 +46,8 @@ static void step_counter_alarm_interrupt(const struct device *counter_dev,
         .flags = 0
     };
 	
-    counter_set_channel_alarm(config->counter, 0, &alarm_cfg);
-	LOG_INF("Exiting Alarm callback");
+    err = counter_set_channel_alarm(config->counter, 0, &alarm_cfg);
+	LOG_INF("EoA %d", err);
 }
 // change end
 
