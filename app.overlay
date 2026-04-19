@@ -72,34 +72,44 @@
 		pitch-stepper = &pitch;
 		yaw-stepper = &yaw;
 		slide-stepper = &slide;
-		my-button = &sw1;
-		my-led = &led_blue;
+		pitch-hall = &hall1;
+		yaw-hall = &hall2;
+		slide-hall = &hall3;
+		// my-led = &led_blue;
 
 	};
 
 	buttons {
 		compatible = "gpio-keys";
 
-		sw1: d2 {
-			gpios = <&gpio0 13 GPIO_ACTIVE_LOW>;	
+		hall1: gp2 {
+			gpios = <&gpio0 2 GPIO_ACTIVE_LOW>;	
+		};
+
+		hall2: gp1 {
+			gpios = <&gpio0 1 GPIO_ACTIVE_LOW>;	
+		};
+
+		hall3: gp4 {
+			gpios = <&gpio0 4 GPIO_ACTIVE_LOW>;	
 		};
 
 	};
 
-	leds {
-		compatible = "gpio-leds";
-		led_blue: d13 {
-			gpios = <&gpio0 14 GPIO_ACTIVE_HIGH>;
-		};
-	};
+	// leds {
+	// 	compatible = "gpio-leds";
+	// 	led_blue: d13 {
+	// 		gpios = <&gpio0 14 GPIO_ACTIVE_HIGH>;
+	// 	};
+	// };
 
 	pitch: tmc2209_pitch {
 		compatible = "adi,tmc2209";
-		en-gpios = <&gpio0 7 GPIO_ACTIVE_LOW>;
-		step-gpios = <&gpio0 6 GPIO_ACTIVE_HIGH>;
-		dir-gpios = <&gpio0 5 GPIO_ACTIVE_HIGH>;
-		msx-gpios = <&gpio1 35 GPIO_ACTIVE_HIGH>,
-                  <&gpio0 0 GPIO_ACTIVE_HIGH>;
+		en-gpios = <&gpio1 38 GPIO_ACTIVE_LOW>;
+		step-gpios = <&gpio0 21 GPIO_ACTIVE_HIGH>;
+		dir-gpios = <&gpio1 47 GPIO_ACTIVE_HIGH>;
+		msx-gpios = <&gpio0 9 GPIO_ACTIVE_HIGH>,
+                  <&gpio0 10 GPIO_ACTIVE_HIGH>;
 		//dual-edge-step;
 		micro-step-res = <16>;
 		counter = <&counter0>;
@@ -107,11 +117,11 @@
 
 	yaw: tmc2209_yaw {
 		compatible = "adi,tmc2209";
-		en-gpios = <&gpio0 7 GPIO_ACTIVE_LOW>;
-		step-gpios = <&gpio0 10 GPIO_ACTIVE_HIGH>;
-		dir-gpios = <&gpio0 9 GPIO_ACTIVE_HIGH>;
-		msx-gpios = <&gpio1 37 GPIO_ACTIVE_HIGH>,
-                  <&gpio1 36 GPIO_ACTIVE_HIGH>;
+		en-gpios = <&gpio0 8 GPIO_ACTIVE_LOW>;
+		step-gpios = <&gpio0 11 GPIO_ACTIVE_HIGH>;
+		dir-gpios = <&gpio0 12 GPIO_ACTIVE_HIGH>;
+		msx-gpios = <&gpio0 9 GPIO_ACTIVE_HIGH>,
+                  <&gpio0 10 GPIO_ACTIVE_HIGH>;
 		//dual-edge-step;
 		micro-step-res = <16>;
 		counter = <&counter1>;
@@ -119,11 +129,11 @@
 
 	slide: tmc2209_slide {
 		compatible = "adi,tmc2209";
-		en-gpios = <&gpio0 7 GPIO_ACTIVE_LOW>;
-		step-gpios = <&gpio0 12 GPIO_ACTIVE_HIGH>;
-		dir-gpios = <&gpio0 11 GPIO_ACTIVE_HIGH>;
-		msx-gpios = <&gpio1 45 GPIO_ACTIVE_HIGH>,
-                  <&gpio1 47 GPIO_ACTIVE_HIGH>;
+		en-gpios = <&gpio0 13 GPIO_ACTIVE_LOW>;
+		step-gpios = <&gpio0 17 GPIO_ACTIVE_HIGH>;
+		dir-gpios = <&gpio0 18 GPIO_ACTIVE_HIGH>;
+		msx-gpios = <&gpio0 9 GPIO_ACTIVE_HIGH>,
+                  <&gpio0 10 GPIO_ACTIVE_HIGH>;
 		//dual-edge-step;
 		micro-step-res = <16>;
 		counter = <&counter2>;
