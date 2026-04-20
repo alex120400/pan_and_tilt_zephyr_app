@@ -93,7 +93,7 @@ pip3 install catkin_pkg lark-parser empy colcon-common-extensions
 
 
 ### Setup ros-agent
-Follow the steps described in the Quickstart, Building and Building micro-ROS-Agent sections from https://github.com/micro-ROS/micro_ros_setup?tab=readme-ov-file#building to get a working ros-agent for the first time. Do not follow any firmware sections!
+Follow the steps described in the Quickstart and Building micro-ROS-Agent sections from https://github.com/micro-ROS/micro_ros_setup?tab=readme-ov-file#building to get a working ros-agent for the first time. Do not follow any firmware sections!
 
 
 ### Start ros-agent in micro-ros workspace via (if built at least once before)
