@@ -127,11 +127,13 @@ Send a command
 ```bash
 ros2 topic pub --once /ESP32_Command vermin_collector_ros_msgs/msg/Command "{
   command_type: 1,
-  step_goals: [32000, 0, 0],
+  step_goals: [3200, 0, 0],
   laser_duration_ms: 0,
   star_diameter: 0,
-  resolution: 64,
-  frequency: 1
+  scan_limit: 0,
+  frequency_goals: [100, 100, 100],
+  en_motors: [1, 1, 1],
+  resolution: 16
 }"
 ```
 
