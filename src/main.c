@@ -278,7 +278,7 @@ void init_steppers(void){
 }
 
 void init_halls(void){
-	if (!(!gpio_is_ready_dt(&pitch_hall)) || (!gpio_is_ready_dt(&yaw_hall)) || (!gpio_is_ready_dt(&slide_hall))) {
+	if ((!gpio_is_ready_dt(&pitch_hall)) || (!gpio_is_ready_dt(&yaw_hall)) || (!gpio_is_ready_dt(&slide_hall))) {
         LOG_ERR("ERROR: One of the Hall sensors is not ready");
 		return;
 	}
