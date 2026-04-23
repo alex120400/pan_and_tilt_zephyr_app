@@ -12,7 +12,7 @@ Specifically, the ROS master subscribes to the /ESP32_Feedback topic to get info
 </div>
 
 ## Custom Messages
-The custom messages built in [ROS2 and microros setup](./ros.md) are explained here now in mpre detail.
+The custom messages built in [ROS2 and microros setup](./ros.md) are explained here now in more detail.
 
 ### Command Message
 The "Command" message is used to control the ESP32 from the ros master. Its structure is given below:
@@ -83,17 +83,17 @@ cd ~/ros2_ws
 source install/setup.bash
 ```
 
-A command can be sent with the following exemplary lines but note that without the specifier "--once" the command gets sent repeatedly in 1 second intervals:
+A command can be sent with the following exemplary lines (turns the pitch motor for one motor-revolution at 16 microsteps) but note that without the specifier "--once" the command gets sent repeatedly in 1 second intervals:
 ```bash
 ros2 topic pub --once /ESP32_Command vermin_collector_ros_msgs/msg/Command "{
   command_type: 1,
-  step_goals: [32000, 0, 0],
+  step_goals: [3200, 0, 0],
   laser_duration_ms: 0,
   star_diameter: 0,
   scan_limit: 0,
   frequency_goals: [100, 100, 100],
   en_motors: [1, 1, 1],
-  resolution: 64
+  resolution: 16
 }"
 ```
 
