@@ -187,7 +187,6 @@ static int counter_esp32_set_alarm(const struct device *dev, uint8_t chan_id,
 
 		} else {
 			data->alarm_cfg.callback = NULL;
-			LOG_ERR("CbNULL");
 		}
 	} else {
 		timer_ll_enable_intr(data->hal_ctx.dev,
@@ -329,7 +328,6 @@ static DEVICE_API(counter, counter_api) = {
 
 static void counter_esp32_isr(void *arg)
 {
-	
 	const struct device *dev = (const struct device *)arg;
 	struct counter_esp32_data *data = dev->data;
 	counter_alarm_callback_t cb = data->alarm_cfg.callback;
@@ -380,7 +378,7 @@ static void counter_esp32_isr(void *arg)
 		.config =                                                                          \
 			{                                                                          \
 				.alarm_en = TIMER_ALARM_DIS,                                       \
-				.counter_en = TIMER_START,                                         \
+				.counter_en = TIMER_PAUSE,                                         \
 				.intr_type = TIMER_INTR_LEVEL,                                     \
 				.counter_dir = TIMER_COUNT_UP,                                     \
 				.auto_reload = TIMER_AUTORELOAD_DIS,                               \

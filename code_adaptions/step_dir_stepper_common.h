@@ -58,7 +58,6 @@ struct step_dir_stepper_common_config {
 // ALEX CHANGE: step_width_ns becomes a device property in later versions, here hardcoded 100ns as they are minimum width according to data sheet anyway
 // the property would always be a lower border (not fixed forever!) for step width (frequency therefore too)
 
-
 /**
  * @brief Initialize common step direction stepper config from devicetree instance.
  * @param inst Instance.
@@ -87,7 +86,6 @@ struct step_dir_stepper_common_data {
 #ifdef CONFIG_STEP_DIR_STEPPER_COUNTER_TIMING
 	struct counter_top_cfg counter_top_cfg;
 	bool counter_running;
-	uint64_t counter_interval_ticks; // ALEX change
 #endif /* CONFIG_STEP_DIR_STEPPER_COUNTER_TIMING */
 
 #ifdef CONFIG_STEPPER_STEP_DIR_GENERATE_ISR_SAFE_EVENTS

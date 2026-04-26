@@ -68,16 +68,17 @@ west espressif monitor -b 115200 -p /dev/ttyACM0
 The specific port needs to be adapted depending on your system but the baudrate is fixed for the project.
 
 ## Zephyr source code adaptions
-The ESP32 has no explicit top-value for its counters but uses some kind of alarm functionality instead. However, due to this, the standard counter-functionality implemented in the TMC2209 driver functions a little peculiar. Even though, it should function as the esp32-vendor has adapted its own code so that setting a top-value is redirected to implementing an alarm, it seems to start the counter immideatly after simply changing the frequency without explicitly starting a motor movement. Additionally, the stepper-source code seems to have changed a little in the latest zephyr versions compared to the used version 4.2, as for example the "step_width_ns" property was not available originally in version 4.2 of the tmc2209 drivers. 
+As the stepper-source code seems to have changed a little in the latest zephyr versions compared to the used version 4.2, as for example the "step_width_ns" property was not available originally in version 4.2 of the tmc2209 drivers. 
 
-Therefore, the source code must be adapted a little. In particular, the three files 
-- step_dir_stepper_counter_timing.c
+Therefore, the source code must be adapted a little. In particular, the two files
 - step_dir_stepper_common.c
 - step_dir_stepper_common.h 
 
 located in this project's repository under ```./code_adaptions/``` must be placed inside ```zephyr_4_2/zephyr/drivers/stepper/step_dir``` and replace the equally named files there. 
 
-Further, there were some instances, in which the timer did not start again during the execution of a movement. This was probably the case because the ISR status is reset in the last line in the esp32 counter ISR routine after the stepper-driver callback is executed. It seems that it is only a matter of time until the interrupt is triggered again before the previous ISR execution reaches the end and therefore the newly set flag is cleared at the end of the current ISR execution leading to a deadlock from a dead timer and a driver waiting for steps to complete. Subsequentially, the flag clreaing was moved to the beginning of the ISR in the esp32 counter ISR in ```zephyr_4_2/zephyr/drivers/counter/counter_esp32_tmr.c```. Therefore, the euqally named file counter_esp32_tmr.c in the code_adaptions folder must replace the file in the zephyr workspace (or just move the respective line higher up in the ISR):
+Additinally, the ESP32 has no explicit top-value for its counters but uses some kind of alarm functionality instead which is already implemented by the esp32-vendor sothat setting a top-value is redirected to implementing an alarm. However, the vendor's counter backbone has one error in it. The set-up routine which is unavoidably called sometime at start-up, already starts the counter using a config-flag which means it produces step signals right at start up which would lead to unintended behaviour. Further, there were some instances, in which the timer did not start again during the execution of a movement. This was probably the case because the ISR status is reset in the last line in the esp32 counter ISR routine after the stepper-driver callback is executed. It seems that it is only a matter of time until the interrupt is triggered again before the previous ISR execution reaches the end and therefore the newly set flag is cleared at the end of the current ISR execution leading to a deadlock from a dead timer and a driver waiting for steps to complete. 
+
+Subsequentially, two changes have to be made in the vendor's code located at ```zephyr_4_2/zephyr/drivers/counter/counter_esp32_tmr.c```. To do so, the euqally named file counter_esp32_tmr.c in the code_adaptions folder must replace the file in the zephyr workspace (or just move the respective line higher up in the ISR and change the parameter in the init macro as below):
 
 ```c
 static void counter_esp32_isr(void *arg) {
@@ -85,5 +86,65 @@ static void counter_esp32_isr(void *arg) {
 	// move the following line up as far as possible
 	timer_ll_clear_intr_status(data->hal_ctx.dev, TIMER_LL_EVENT_ALARM(data->hal_ctx.timer_id));
     ...
+}
+
+
+#define ESP32_COUNTER_INIT(idx)                                                                    \
+                                                                                                   \
+	static struct counter_esp32_data counter_data_##idx;                                       \
+                                                                                                   \
+	static const struct counter_esp32_config counter_config_##idx = {                          \
+		.counter_info = {.max_top_value = UINT32_MAX,                                      \
+				 .flags = COUNTER_CONFIG_INFO_COUNT_UP,                            \
+				 .channels = 1},                                                   \
+		.config =                                                                          \
+			{                                                                          \
+				.alarm_en = TIMER_ALARM_DIS,                                       \
+				.counter_en = TIMER_PAUSE,                                         \ // was originally TIMER_START
+				.intr_type = TIMER_INTR_LEVEL,                                     \
+				.counter_dir = TIMER_COUNT_UP,                                     \
+				.auto_reload = TIMER_AUTORELOAD_DIS,                               \
+				.divider = ESP32_COUNTER_GET_CLK_DIV(idx),                         \
+			},                                                                         \
+		.clock_dev = DEVICE_DT_GET(DT_CLOCKS_CTLR(TIMER(idx))),                            \
+		.clock_subsys = (clock_control_subsys_t)DT_CLOCKS_CELL(TIMER(idx), offset),        \
+		.group = DT_PROP(TIMER(idx), group),                                               \
+		.index = DT_PROP(TIMER(idx), index),                                               \
+		.irq_source = DT_IRQ_BY_IDX(TIMER(idx), 0, irq),                                   \
+		.irq_priority = DT_IRQ_BY_IDX(TIMER(idx), 0, priority),                            \
+		.irq_flags = DT_IRQ_BY_IDX(TIMER(idx), 0, flags)};                                 \
+                                                                                                   \
+	DEVICE_DT_INST_DEFINE(idx, counter_esp32_init, NULL, &counter_data_##idx,                  \
+			      &counter_config_##idx, PRE_KERNEL_1, CONFIG_COUNTER_INIT_PRIORITY,   \
+			      &counter_api);
+
+
+```
+
+
+Finally, there was another tricky bug which is not understood fully but a work-around was found. GPIO38 which is already fixed in the PCB design later showed strange behaviour in the software as it could not be used properly to enable the pitch stepper driver. It just sticked always to being high which disables the driver. However, adding the following lines to the tmc22xx.c file located in  ```zephyr_4_2/zephyr/drivers/stepper/adi_tmc``` fixes the problem:
+
+```c
+static int tmc22xx_stepper_enable(const struct device *dev)
+{
+	const struct tmc22xx_config *config = dev->config;
+
+	/* FORCE reconfiguration right before use */
+    gpio_pin_configure_dt(&config->enable_pin, GPIO_OUTPUT);
+
+	LOG_DBG("Enabling Stepper motor controller %s", dev->name);
+	return gpio_pin_set_dt(&config->enable_pin, 1);
+}
+
+static int tmc22xx_stepper_disable(const struct device *dev)
+{
+	const struct tmc22xx_config *config = dev->config;
+
+	/* FORCE reconfiguration right before use */
+    gpio_pin_configure_dt(&config->enable_pin, GPIO_OUTPUT);
+
+	LOG_DBG("Disabling Stepper motor controller %s", dev->name);
+	return gpio_pin_set_dt(&config->enable_pin, 0);
+}
 }
 ```
