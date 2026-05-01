@@ -30,6 +30,7 @@ LOG_MODULE_REGISTER(main);
 #include <rmw_microros/rmw_microros.h>
 #include <microros_transports.h>
 
+
 /* #################################### system preparation steps #################################### */
 typedef enum {
     STATE_READY,
@@ -46,9 +47,12 @@ typedef enum {
 volatile system_state_t system_state = STATE_CONFIGURING; // mirrors stepper state, synchronous for all steppers
 volatile bool command_pending = false;
 
-
 #define PITCH_STEPS_PER_REV 610
 #define YAW_STEPS_PER_REV 1694
+
+#define COMMAND_STACK_SIZE 4096
+K_THREAD_STACK_DEFINE(command_stack, COMMAND_STACK_SIZE); // define stack areas for the threads
+static struct k_thread command_thread; // define thread data structs
 
 
 /* #################################### uROS preparation steps #################################### */
@@ -76,22 +80,32 @@ enum stepper_micro_step_resolution current_res = STEPPER_MICRO_STEP_16; // synch
 rcl_subscription_t command_sub;
 vermin_collector_ros_msgs__msg__Command active_command_msg;
 
+typedef enum {
+    simple_homing,
+    soft_homing,
+    hard_homing
+} homing_flag_t;
 
 
 /* #################################### Stepper preparation steps #################################### */
-// #define TIMER_FREQ 40000000 // 40MHz
 #define FREQ_FROM_INTV(intv_ns) (1000000000.0 / intv_ns)
 #define INTV_FROM_FREQ(freq_hz) (1000000000.0 / freq_hz)
 
 // define stepper devices, related semaphores and idx as structs
+typedef enum {
+	STEPPER_DISABLED,
+    STEPPER_ENABLED,
+    STEPPER_MOVING
+} stepper_state_t;
+
 typedef struct {
     const struct device *dev;
-    struct k_sem *sem;
+    // struct k_sem *sem;
     uint8_t idx;
 	const char * name;
-	uint32_t magn_pos_hl;
-	uint32_t magn_pos_lh;
-	uint8_t state;
+	int32_t magn_pos_hl;
+	int32_t magn_pos_lh;
+	stepper_state_t state;
 
 } stepper_ctx_t;
 
@@ -99,11 +113,6 @@ stepper_ctx_t steppers[3]; // will be pitch, yaw, slide
 #define PITCH_IDX 0
 #define YAW_IDX 1
 #define SLIDE_IDX 2
-
-K_SEM_DEFINE(pitch_steps_completed_sem, 0, 1); // 0 means semaphore needs to be released before it may be taken for the first time
-K_SEM_DEFINE(yaw_steps_completed_sem, 0, 1);
-K_SEM_DEFINE(slide_steps_completed_sem, 0, 1);
-
 
 
 /* #################################### LED-strip preparation steps #################################### */
@@ -122,7 +131,6 @@ static struct led_rgb colors[] = {
 
 
 /* #################################### Hall Sensor preparation step #################################### */
-// static const struct gpio_dt_spec led = GPIO_DT_SPEC_GET(DT_ALIAS(my_led), gpios);
 static const struct gpio_dt_spec pitch_hall = GPIO_DT_SPEC_GET(DT_ALIAS(pitch_hall), gpios);
 static struct gpio_callback pitch_hall_cb_data;
 static const struct gpio_dt_spec yaw_hall = GPIO_DT_SPEC_GET(DT_ALIAS(yaw_hall), gpios);
@@ -190,30 +198,20 @@ void command_callback(const void *msgin){	// handles subscription to new incomin
 
 	// active_command_msg = *msg; // redundant as active_command_msg is provided as buffer in the add_subscription handling
 	command_pending = true; // signal main loop
-
-	// k_sem_take(steppers[PITCH_IDX].sem, K_FOREVER);
-	// stepper_move_by(steppers[PITCH_IDX].dev, 10);
-
-	// k_sem_take(steppers[YAW_IDX].sem, K_FOREVER);
-	// stepper_move_by(steppers[YAW_IDX].dev, 50);
-
-	// k_sem_take(steppers[SLIDE_IDX].sem, K_FOREVER);
-	// stepper_move_by(steppers[SLIDE_IDX].dev, 100);
 }
 
 void stepper_callback(const struct device *dev, const enum stepper_event event, void *user_data){
 	stepper_ctx_t *ctx = (stepper_ctx_t *)user_data;
-	LOG_INF("Event %d occured on stepper: %s\n", event, ctx->name);
+	LOG_DBG("Event %d occured on stepper: %s\n", event, ctx->name);
 	switch (event){
 	case STEPPER_EVENT_STEPS_COMPLETED:
-		k_sem_give(ctx->sem);
-		LOG_INF("Steps completed on stepper: %s\n", ctx->name);
+		ctx->state = STEPPER_ENABLED;
+		LOG_DBG("Steps completed on stepper: %s\n", ctx->name);
 		break;
 	default:
 		break;
 	}
 }
-
 
 
 /* #################################### device init functions #################################### */
@@ -232,32 +230,32 @@ void init_steppers(void){
 	// fill steppers list
     steppers[PITCH_IDX] = (stepper_ctx_t){
         .dev = DEVICE_DT_GET(DT_ALIAS(pitch_stepper)),
-        .sem = &pitch_steps_completed_sem,
+        // .sem = &pitch_steps_completed_sem,
         .idx = PITCH_IDX,
 		.name = "PITCH",
 		.magn_pos_hl = 0x0000,
 		.magn_pos_lh = 0x0000,
-		.state = 0x0
+		.state = STEPPER_DISABLED
     };
 
     steppers[YAW_IDX] = (stepper_ctx_t){
         .dev = DEVICE_DT_GET(DT_ALIAS(yaw_stepper)),
-        .sem = &yaw_steps_completed_sem,
+        // .sem = &yaw_steps_completed_sem,
         .idx = YAW_IDX,
 		.name = "YAW",
 		.magn_pos_hl = 0x0000,
 		.magn_pos_lh = 0x0000,
-		.state = 0x0
+		.state = STEPPER_DISABLED
     };
 
     steppers[SLIDE_IDX] = (stepper_ctx_t){
         .dev = DEVICE_DT_GET(DT_ALIAS(slide_stepper)),
-        .sem = &slide_steps_completed_sem,
+        // .sem = &slide_steps_completed_sem,
         .idx = SLIDE_IDX,
 		.name = "SLIDE",
 		.magn_pos_hl = 0x0000,
 		.magn_pos_lh = 0x0000,
-		.state = 0x0
+		.state = STEPPER_DISABLED
     };
 
 	// check devices and set default values
@@ -266,14 +264,14 @@ void init_steppers(void){
 			LOG_ERR("Device %s is not ready\n", steppers[stepper_idx].name);
 			return;
 		}
-		LOG_INF("stepper is %p, name is %s\n", steppers[stepper_idx].dev, steppers[stepper_idx].name);
+		LOG_DBG("stepper is %p, name is %s\n", steppers[stepper_idx].dev, steppers[stepper_idx].name);
 	
 		stepper_set_event_callback(steppers[stepper_idx].dev, stepper_callback, &steppers[stepper_idx]);
 		stepper_set_reference_position(steppers[stepper_idx].dev, 0);
 		stepper_set_micro_step_res(steppers[stepper_idx].dev, current_res);
 		stepper_set_microstep_interval(steppers[stepper_idx].dev, INTV_FROM_FREQ(current_frequencies[stepper_idx]));
 		stepper_enable(steppers[stepper_idx].dev);
-		steppers[stepper_idx].state = 0x01;
+		steppers[stepper_idx].state = STEPPER_ENABLED;
 	}
 }
 
@@ -308,22 +306,21 @@ void init_halls(void){
 	gpio_add_callback(yaw_hall.port, &yaw_hall_cb_data);
 	gpio_add_callback(slide_hall.port, &slide_hall_cb_data);
 
-	ret = gpio_pin_interrupt_configure_dt(&pitch_hall, GPIO_INT_MODE_DISABLE_ONLY); // Disable interrupt for now
-    ret += gpio_pin_interrupt_configure_dt(&yaw_hall, GPIO_INT_MODE_DISABLE_ONLY); // Disable interrupt for now
-    ret += gpio_pin_interrupt_configure_dt(&slide_hall, GPIO_INT_MODE_DISABLE_ONLY); // Disable interrupt for now
-    if (ret < 0) {
-        LOG_ERR("Could not disable hall sensors interrupts");
-        return;
-    }
-
+	// ret = gpio_pin_interrupt_configure_dt(&pitch_hall, GPIO_INT_MODE_DISABLE_ONLY); // Disable interrupt for now
+    // ret += gpio_pin_interrupt_configure_dt(&yaw_hall, GPIO_INT_MODE_DISABLE_ONLY); // Disable interrupt for now
+    // ret += gpio_pin_interrupt_configure_dt(&slide_hall, GPIO_INT_MODE_DISABLE_ONLY); // Disable interrupt for now
+    // if (ret < 0) {
+    //     LOG_ERR("Could not disable hall sensors interrupts");
+    //     return;
+    // }
 }
 
 
 /* #################################### command routines and helper functions #################################### */
 void handle_setup(void){
-    LOG_INF("SETUP: configuring...\n");
+    LOG_DBG("SETUP: configuring...\n");
     if (led_strip_update_rgb(strip, &colors[CONFIGURING_IDX], STRIP_NUM_PIXELS) != 0) {
-    LOG_ERR("LED update failed");
+    	LOG_ERR("LED update failed");
 	}
 	system_state = STATE_CONFIGURING; // change system state
 	command_pending = false;
@@ -353,102 +350,128 @@ void handle_setup(void){
 		stepper_set_microstep_interval(steppers[stepper_idx].dev, INTV_FROM_FREQ(current_frequencies[stepper_idx]));
 		if (active_command_msg.en_motors[stepper_idx]){
 			stepper_enable(steppers[stepper_idx].dev);
-			steppers[stepper_idx].state = 0x01;
+			steppers[stepper_idx].state = STEPPER_ENABLED;
 		}
 		else {
 			stepper_disable(steppers[stepper_idx].dev);
-			steppers[stepper_idx].state = 0x00;
+			steppers[stepper_idx].state = STEPPER_DISABLED;
 		}
 	}
 
-    LOG_INF("SETUP done\n");
+    LOG_DBG("SETUP done\n");
 
     system_state = STATE_READY;
 	if (led_strip_update_rgb(strip, &colors[READY_IDX], STRIP_NUM_PIXELS) != 0) {
-    LOG_ERR("LED update failed");
+    	LOG_ERR("LED update failed");
 	}
 }
 
+void wait_for_movement_to_finish(stepper_ctx_t *ctx){
+	while(ctx->state == STEPPER_MOVING){
+		k_msleep(10);
+	} // wait until movement is finished
+}
 
-void move_and_wait(stepper_ctx_t *ctx, int32_t steps){
-	k_sem_reset(ctx->sem); // make sure semaphore is 0 right now
-	LOG_INF("Moving stepper: %s\n", ctx->name);
-    stepper_move_by(ctx->dev, steps);
-    k_sem_take(ctx->sem, K_FOREVER);   // take semaphore and wait till movement is finished, this will block here since semaphore are 0-initialized
+void move_savely_to(stepper_ctx_t *ctx, int32_t step_goal){
+	if (ctx->state == STEPPER_DISABLED) {
+		LOG_ERR("Stepper %s not enabled, cannot move!", ctx->name);
+		return;
+	}
+
+	wait_for_movement_to_finish(ctx);
+	LOG_DBG("Moving stepper: %s\n", ctx->name);
+	ctx->state = STEPPER_MOVING; // reset in stepper callback
+    stepper_move_to(ctx->dev, step_goal);
+}
+
+void move_savely_by(stepper_ctx_t *ctx, int32_t step_amount){
+	if (ctx->state == STEPPER_DISABLED) {
+		LOG_ERR("Stepper %s not enabled, cannot move!", ctx->name);
+		return;
+	}
+
+	wait_for_movement_to_finish(ctx);
+	LOG_DBG("Moving stepper: %s\n", ctx->name);
+	ctx->state = STEPPER_MOVING; // reset in stepper callback
+    stepper_move_by(ctx->dev, step_amount);
 }
 
 
-void handle_homing(uint8_t hard_homeing_flag){
+void handle_homing(homing_flag_t homing_flag){
     system_state = STATE_CALIBRATING;
 	command_pending = false;
 	if (led_strip_update_rgb(strip, &colors[CALIBRATING_IDX], STRIP_NUM_PIXELS) != 0) {
-    LOG_ERR("LED update failed");
+    	LOG_ERR("LED update failed");
 	}
 
 	uint32_t home_goal = 0x00;
 	// Pitch and Yaw homeing only for now
-	uint8_t ret = 0;
-	ret = gpio_pin_interrupt_configure_dt(&pitch_hall, GPIO_INT_MODE_ENABLE_ONLY); // Enable interrupt for now
-    ret += gpio_pin_interrupt_configure_dt(&yaw_hall, GPIO_INT_MODE_ENABLE_ONLY); // Enable interrupt for now
-    ret += gpio_pin_interrupt_configure_dt(&slide_hall, GPIO_INT_MODE_ENABLE_ONLY); // Enable interrupt for now
-    if (ret < 0) {
-        LOG_ERR("Could not enable hall sensors interrupts");
-    }
+	// uint8_t ret = 0;
+	// ret = gpio_pin_interrupt_configure_dt(&pitch_hall, GPIO_INT_MODE_ENABLE_ONLY); // Enable interrupt for now
+    // ret += gpio_pin_interrupt_configure_dt(&yaw_hall, GPIO_INT_MODE_ENABLE_ONLY); // Enable interrupt for now
+    // ret += gpio_pin_interrupt_configure_dt(&slide_hall, GPIO_INT_MODE_ENABLE_ONLY); // Enable interrupt for now
+    // if (ret < 0) {
+    //     LOG_ERR("Could not enable hall sensors interrupts");
+    // }
 
-	if (hard_homeing_flag){
+	if (homing_flag == hard_homing){
 		// reset positions
 		steppers[PITCH_IDX].magn_pos_hl = 0x00;
 		steppers[PITCH_IDX].magn_pos_hl = 0x00;
 		steppers[YAW_IDX].magn_pos_hl = 0x00;
 		steppers[YAW_IDX].magn_pos_hl = 0x00;
 
-		// move one revolution
-		move_and_wait(&steppers[PITCH_IDX], PITCH_STEPS_PER_REV*current_res);
-		move_and_wait(&steppers[YAW_IDX], YAW_STEPS_PER_REV*current_res);
+		// set current pos to zero to move in positive step range
+		stepper_set_reference_position(steppers[PITCH_IDX].dev, 0); // new home position is reference 0
+		stepper_set_reference_position(steppers[YAW_IDX].dev, 0); // new home position is reference 0
 
-		// Hall ISRs should have fired by now and changed the magnetic positions
-		if (steppers[PITCH_IDX].magn_pos_lh > steppers[PITCH_IDX].magn_pos_hl){
-			home_goal = (steppers[PITCH_IDX].magn_pos_lh - steppers[PITCH_IDX].magn_pos_hl) / 2;
+		// move one revolution and wait till its finished
+		move_savely_by(&steppers[PITCH_IDX], PITCH_STEPS_PER_REV*current_res);
+		move_savely_by(&steppers[YAW_IDX], YAW_STEPS_PER_REV*current_res);
+		wait_for_movement_to_finish(&steppers[PITCH_IDX]);
+		wait_for_movement_to_finish(&steppers[YAW_IDX]);
+
+		// Hall ISRs should have fired by now and updated the magnetic positions
+		if (steppers[PITCH_IDX].magn_pos_lh > steppers[PITCH_IDX].magn_pos_hl){ // general case, encounterd magnet along the way
+			home_goal = (steppers[PITCH_IDX].magn_pos_lh + steppers[PITCH_IDX].magn_pos_hl) / 2;
 		}
-		else {
-			home_goal = (steppers[PITCH_IDX].magn_pos_hl - steppers[PITCH_IDX].magn_pos_lh) / 2;
+		else { // special case, started in magnetic region, ended with high-low transition, need to add a revolution to low-high tranistion
+			home_goal = (steppers[PITCH_IDX].magn_pos_hl + (steppers[PITCH_IDX].magn_pos_lh + PITCH_STEPS_PER_REV*current_res)) / 2;
 		}
-		k_sem_reset(steppers[PITCH_IDX].sem); // make sure semaphore is 0 right now
-		stepper_move_to(steppers[PITCH_IDX].dev, home_goal);
-		k_sem_take(steppers[PITCH_IDX].sem, K_FOREVER);   // take semaphore and wait
+		move_savely_to(&steppers[PITCH_IDX], home_goal);
+		wait_for_movement_to_finish(&steppers[PITCH_IDX]); // wait untill home is reached
 		stepper_set_reference_position(steppers[PITCH_IDX].dev, 0); // new home position is reference 0
 
 		if (steppers[YAW_IDX].magn_pos_lh > steppers[YAW_IDX].magn_pos_hl){
-			home_goal = (steppers[YAW_IDX].magn_pos_lh - steppers[YAW_IDX].magn_pos_hl) / 2;
+			home_goal = (steppers[YAW_IDX].magn_pos_lh + steppers[YAW_IDX].magn_pos_hl) / 2;
 		}
 		else {
-			home_goal = (steppers[YAW_IDX].magn_pos_hl - steppers[YAW_IDX].magn_pos_lh) / 2;
+			home_goal = (steppers[YAW_IDX].magn_pos_hl + (steppers[YAW_IDX].magn_pos_lh + YAW_STEPS_PER_REV*current_res)) / 2;
 		}
-		k_sem_reset(steppers[YAW_IDX].sem); // make sure semaphore is 0 right now
-		stepper_move_to(steppers[YAW_IDX].dev, home_goal);
-		k_sem_take(steppers[YAW_IDX].sem, K_FOREVER);   // take semaphore and wait
+		move_savely_to(&steppers[YAW_IDX], home_goal);
+		wait_for_movement_to_finish(&steppers[YAW_IDX]); // wait until home is reached
 		stepper_set_reference_position(steppers[YAW_IDX].dev, 0); // new home position is reference 0
+	} else if (homing_flag == soft_homing) {
+		// set current position as home
+		stepper_set_reference_position(steppers[PITCH_IDX].dev, 0); // new home position is reference 0
+		stepper_set_reference_position(steppers[YAW_IDX].dev, 0); // new home position is reference 0
+	} else { // homing, just move to last set 0 position
+		move_savely_to(&steppers[PITCH_IDX], 0);
+		move_savely_to(&steppers[YAW_IDX], 0);
+		wait_for_movement_to_finish(&steppers[PITCH_IDX]);
+		wait_for_movement_to_finish(&steppers[YAW_IDX]);
 	}
-	else { // just move to last set 0 position
-		k_sem_reset(steppers[PITCH_IDX].sem); // make sure semaphore is 0 right now
-		stepper_move_to(steppers[PITCH_IDX].dev, 0);
-    	k_sem_take(steppers[PITCH_IDX].sem, K_FOREVER);   // take semaphore and wait
 
-		k_sem_reset(steppers[YAW_IDX].sem); // make sure semaphore is 0 right now
-		stepper_move_to(steppers[YAW_IDX].dev, 0);
-    	k_sem_take(steppers[YAW_IDX].sem, K_FOREVER);   // take semaphore and wait
-	}
-
-	ret = gpio_pin_interrupt_configure_dt(&pitch_hall, GPIO_INT_MODE_DISABLE_ONLY); // Disable interrupt again
-    ret += gpio_pin_interrupt_configure_dt(&yaw_hall, GPIO_INT_MODE_DISABLE_ONLY); // Disable interrupt again
-    ret += gpio_pin_interrupt_configure_dt(&slide_hall, GPIO_INT_MODE_DISABLE_ONLY); // Disable interrupt again
-    if (ret < 0) {
-        LOG_ERR("Could not disable hall sensors interrupts");
-    }
-
+	// ret = gpio_pin_interrupt_configure_dt(&pitch_hall, GPIO_INT_MODE_DISABLE_ONLY); // Disable interrupt again
+    // ret += gpio_pin_interrupt_configure_dt(&yaw_hall, GPIO_INT_MODE_DISABLE_ONLY); // Disable interrupt again
+    // ret += gpio_pin_interrupt_configure_dt(&slide_hall, GPIO_INT_MODE_DISABLE_ONLY); // Disable interrupt again
+    // if (ret < 0) {
+    //     LOG_ERR("Could not disable hall sensors interrupts");
+    // }
+	
     system_state = STATE_READY;
 	if (led_strip_update_rgb(strip, &colors[READY_IDX], STRIP_NUM_PIXELS) != 0) {
-    LOG_ERR("LED update failed");
+    	LOG_ERR("LED update failed");
 	}
 }
 
@@ -462,11 +485,11 @@ void scan_pattern(uint32_t d){
 		    |
 		movement may be interpreted as pitch: up&down
 	*/
-    LOG_INF("Sacnning: %d", d);
+    LOG_DBG("Sacnning: %d", d);
     // ---- PITCH only ----
-    move_and_wait(&steppers[PITCH_IDX],  d);
-    move_and_wait(&steppers[PITCH_IDX], -2*d);
-    move_and_wait(&steppers[PITCH_IDX],  d);
+    move_savely_by(&steppers[PITCH_IDX],  d);
+    move_savely_by(&steppers[PITCH_IDX], -2*d);
+    move_savely_by(&steppers[PITCH_IDX],  d);
 }
 
 
@@ -486,61 +509,69 @@ void star_pattern(vermin_collector_ros_msgs__msg__Command *cmd){
 	*/
 	
     int32_t d = cmd->star_diameter;
+	int32_t d_half = d / 2;
 
-    LOG_INF("Star pattern, diameter: %d\n", d);
+    LOG_DBG("Star pattern, diameter: %d\n", d);
+
+	// check if frequency is the same!
+	if (current_frequencies[PITCH_IDX] != current_frequencies[YAW_IDX]){
+		LOG_ERR("Star pattern not recommended with different frequencies");
+	}
 
     // ---- PITCH only ----
-    move_and_wait(&steppers[PITCH_IDX],  d);
-    move_and_wait(&steppers[PITCH_IDX], -2*d);
-    move_and_wait(&steppers[PITCH_IDX],  d);
+    move_savely_by(&steppers[PITCH_IDX],  d_half);
+    move_savely_by(&steppers[PITCH_IDX], -d);
+    move_savely_by(&steppers[PITCH_IDX],  d_half);
 
     // ---- YAW only ----
-    move_and_wait(&steppers[YAW_IDX],  d);
-    move_and_wait(&steppers[YAW_IDX], -2*d);
-    move_and_wait(&steppers[YAW_IDX],  d);
+    move_savely_by(&steppers[YAW_IDX],  d_half);
+    move_savely_by(&steppers[YAW_IDX], -d);
+    move_savely_by(&steppers[YAW_IDX],  d_half);
 
     // ---- BOTH in the same direction ----
+    move_savely_by(&steppers[PITCH_IDX],  d_half);
+    move_savely_by(&steppers[YAW_IDX],  d_half);
+	
+	wait_for_movement_to_finish(&steppers[PITCH_IDX]); // wait till movement is finished, to be synchronous
+	wait_for_movement_to_finish(&steppers[YAW_IDX]);
 
-    stepper_move_by(steppers[PITCH_IDX].dev,  d);
-    stepper_move_by(steppers[YAW_IDX].dev,    d);
-    k_sem_take(steppers[PITCH_IDX].sem, K_FOREVER);
-    k_sem_take(steppers[YAW_IDX].sem,   K_FOREVER);
+    move_savely_by(&steppers[PITCH_IDX],  -d);
+    move_savely_by(&steppers[YAW_IDX],  -d);
 
-    stepper_move_by(steppers[PITCH_IDX].dev, -2*d);
-    stepper_move_by(steppers[YAW_IDX].dev,   -2*d);
-    k_sem_take(steppers[PITCH_IDX].sem, K_FOREVER);
-    k_sem_take(steppers[YAW_IDX].sem,   K_FOREVER);
+	wait_for_movement_to_finish(&steppers[PITCH_IDX]); // wait till movement is finished, to be synchronous
+	wait_for_movement_to_finish(&steppers[YAW_IDX]);
 
-    stepper_move_by(steppers[PITCH_IDX].dev,  d);
-    stepper_move_by(steppers[YAW_IDX].dev,    d);
-    k_sem_take(steppers[PITCH_IDX].sem, K_FOREVER);
-    k_sem_take(steppers[YAW_IDX].sem,   K_FOREVER);
+    move_savely_by(&steppers[PITCH_IDX],  d_half);
+    move_savely_by(&steppers[YAW_IDX],  d_half);
 
     // ---- BOTH in the opposite direction ----
-    stepper_move_by(steppers[PITCH_IDX].dev, d);
-    stepper_move_by(steppers[YAW_IDX].dev, -d);
-    k_sem_take(steppers[PITCH_IDX].sem, K_FOREVER);
-    k_sem_take(steppers[YAW_IDX].sem,   K_FOREVER);
+    move_savely_by(&steppers[PITCH_IDX],  d_half);
+    move_savely_by(&steppers[YAW_IDX],  -d_half);
+	
+	wait_for_movement_to_finish(&steppers[PITCH_IDX]); // wait till movement is finished, to be synchronous
+	wait_for_movement_to_finish(&steppers[YAW_IDX]);
 
-    stepper_move_by(steppers[PITCH_IDX].dev, -2*d);
-    stepper_move_by(steppers[YAW_IDX].dev, 2*d);
-    k_sem_take(steppers[PITCH_IDX].sem, K_FOREVER);
-    k_sem_take(steppers[YAW_IDX].sem,   K_FOREVER);
+    move_savely_by(&steppers[PITCH_IDX],  -d);
+    move_savely_by(&steppers[YAW_IDX],  d);
 
-    stepper_move_by(steppers[PITCH_IDX].dev, d);
-    stepper_move_by(steppers[YAW_IDX].dev, -d);
-    k_sem_take(steppers[PITCH_IDX].sem, K_FOREVER);
-    k_sem_take(steppers[YAW_IDX].sem,   K_FOREVER);
+	wait_for_movement_to_finish(&steppers[PITCH_IDX]); // wait till movement is finished, to be synchronous
+	wait_for_movement_to_finish(&steppers[YAW_IDX]);
+
+    move_savely_by(&steppers[PITCH_IDX],  d_half);
+    move_savely_by(&steppers[YAW_IDX],  -d_half);
 }
 
 void simple_target(vermin_collector_ros_msgs__msg__Command *cmd){
-    LOG_INF("Simple target\n");
+    LOG_DBG("Simple target");
 
-    move_and_wait(&steppers[PITCH_IDX], cmd->step_goals[PITCH_IDX]);
-    move_and_wait(&steppers[YAW_IDX],   cmd->step_goals[YAW_IDX]);
-    move_and_wait(&steppers[SLIDE_IDX], cmd->step_goals[SLIDE_IDX]);
+    move_savely_to(&steppers[PITCH_IDX], cmd->step_goals[PITCH_IDX]);
+    move_savely_to(&steppers[YAW_IDX],   cmd->step_goals[YAW_IDX]);
+    move_savely_to(&steppers[SLIDE_IDX], cmd->step_goals[SLIDE_IDX]);
 
-	if (cmd->scan_limit > 0) scan_pattern(cmd->scan_limit);
+	if (cmd->scan_limit > 0){
+		LOG_DBG("Starting scan with length %d", cmd->scan_limit);
+		scan_pattern(cmd->scan_limit);
+	} 
 }
 
 void handle_target(vermin_collector_ros_msgs__msg__Command *cmd){
@@ -548,7 +579,7 @@ void handle_target(vermin_collector_ros_msgs__msg__Command *cmd){
 	command_pending = false;
     system_state = STATE_MOVING;
 	if (led_strip_update_rgb(strip, &colors[MOVING_IDX], STRIP_NUM_PIXELS) != 0) {
-    LOG_ERR("LED update failed");
+    	LOG_ERR("LED update failed");
 	}
 
     if (local_cmd.star_diameter == 0) {
@@ -561,16 +592,65 @@ void handle_target(vermin_collector_ros_msgs__msg__Command *cmd){
         star_pattern(&local_cmd); // execute star
     }
 
+	wait_for_movement_to_finish(&steppers[PITCH_IDX]); // wait till remaining movement is finished, before changing system state
+	wait_for_movement_to_finish(&steppers[YAW_IDX]);
+	wait_for_movement_to_finish(&steppers[SLIDE_IDX]);
+
     system_state = STATE_READY;
 	if (led_strip_update_rgb(strip, &colors[READY_IDX], STRIP_NUM_PIXELS) != 0) {
-    LOG_ERR("LED update failed");
+    	LOG_ERR("LED update failed");
 	}
 }
+
+/* #################################### command thread entry point #################################### */
+void command_thread_entry(void *arg_1, void *arg_2, void *arg_3){
+	ARG_UNUSED(arg_1);
+	ARG_UNUSED(arg_2);
+	ARG_UNUSED(arg_3);
+
+	while(1){
+		if (command_pending) {
+			// command_pending = false; // done in routines
+			switch (active_command_msg.command_type)
+			{
+			case vermin_collector_ros_msgs__msg__Command__SETUP:
+				handle_setup();
+				break;
+
+			case vermin_collector_ros_msgs__msg__Command__TARGET:
+				handle_target(&active_command_msg);
+				break;
+
+			case vermin_collector_ros_msgs__msg__Command__HOMING:
+				handle_homing(simple_homing); // just move to previously stored reference zero
+				break;
+
+			case vermin_collector_ros_msgs__msg__Command__SOFT_HOMING:
+				handle_homing(soft_homing); // set current position to be the reference, do not move at all
+				break;
+
+			case vermin_collector_ros_msgs__msg__Command__HARD_HOMING:
+				handle_homing(hard_homing); // perform one revolution on each axis and move to middle of magnets
+				break;
+
+			default:
+				printk("Unknown command\n");
+				break;
+			}
+    	}
+		k_msleep(100);
+	}
+
+}
+
 
 
 
 /* #################################### main loop #################################### */
 int main(void){
+	// define thread tid
+	k_tid_t command_tid;
+
 	// init peripherial devices
 	init_led();
 	init_steppers();
@@ -651,41 +731,28 @@ int main(void){
 	// now ready for taking commands
 	system_state = STATE_READY;
 	if (led_strip_update_rgb(strip, &colors[READY_IDX], STRIP_NUM_PIXELS) != 0) {
-    LOG_ERR("LED update failed");
+    	LOG_ERR("LED update failed");
 	}
 
 
 
+	// start command thread
+	command_tid = k_thread_create(&command_thread, 		// thread struct
+								  command_stack,		// stack
+								  K_THREAD_STACK_SIZEOF(command_stack),
+								  command_thread_entry, // Entry point
+								  NULL,					// arg_1
+								  NULL,					// arg_2
+								  NULL,					// arg_3
+								  7, 					// Priority
+								  0, 					// options
+								  K_NO_WAIT				// Delay to creation
+	);
+
 	while (1){
+		// main thread runs ros execution
 		rclc_executor_spin_some(&executor, 100);
-		if (command_pending) {
-        // command_pending = false; // done in routines
-
-        switch (active_command_msg.command_type)
-        {
-        case vermin_collector_ros_msgs__msg__Command__SETUP:
-            handle_setup();
-            break;
-
-        case vermin_collector_ros_msgs__msg__Command__TARGET:
-            handle_target(&active_command_msg);
-            break;
-
-        case vermin_collector_ros_msgs__msg__Command__HOMING:
-            handle_homing(0x00); // just move to reference zero
-            break;
-
-		case vermin_collector_ros_msgs__msg__Command__HARD_HOMING:
-            handle_homing(0x01); // perform one revolution on each axis and move to middle of magnets
-            break;
-
-        default:
-            printk("Unknown command\n");
-            break;
-        }
-    }
-
-    k_msleep(100);
+    	k_msleep(100);
 	}
 
 
