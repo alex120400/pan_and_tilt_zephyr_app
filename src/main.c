@@ -194,10 +194,15 @@ void timer_callback(rcl_timer_t *timer, int64_t last_call_time){ // used to publ
 
 void command_callback(const void *msgin){	// handles subscription to new incoming command
 	const vermin_collector_ros_msgs__msg__Command *msg = msgin;
-	LOG_INF("Received Command of type: %d\n0..SETUP, 1..TARGET, 2..HOMING\n", msg->command_type);
+	LOG_INF("Received Command of type: %d\n0..SETUP, 1..TARGET, 2..HOMING, 3..SOFT_HOMING, 4..HARD_HOMING\n", msg->command_type);
 
 	// active_command_msg = *msg; // redundant as active_command_msg is provided as buffer in the add_subscription handling
-	command_pending = true; // signal main loop
+	if (system_state == STATE_READY){
+		command_pending = true; // signal for command thread to act
+	} else {
+		LOG_INF("Ignored Command of type: %d\nSystem state is %d\n1..CONFIGURING, 2..MOVING, 3..CALIBRATING -> wait for 0..READY\n", msg->command_type);
+	}
+	
 }
 
 void stepper_callback(const struct device *dev, const enum stepper_event event, void *user_data){

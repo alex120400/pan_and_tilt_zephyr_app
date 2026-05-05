@@ -8,3 +8,4 @@ title = "Pitch-Yaw-Slide-Mount - Documentation"
 [output.html]
 default-theme = "light"
 title = "Pitch-Yaw-Slide-Mount - Documentation"
+additional-css = ["theme/custom.css"]
