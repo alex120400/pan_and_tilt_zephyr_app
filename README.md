@@ -9,8 +9,13 @@ This project aims to drive a tilt-roll-slide assembly which will be deployed on 
   <p><em>Assembled prototype system allowing roll and tilt movement combined with sliding featureing a camera slot and laser pointer.</em></p>
 </div>
 
-## Disclaimer
-This project builds on the wonderful reference project by isaac hosted at https://github.com/isaac879/Pan-Tilt-Mount. It further builds on Zephyr and Micro-Ros. Note that this project is still in development so there might be things not working yet. A much more detailed explainaition of the project and its capabilities is located in the mdbook docu under [docu](./docu).
+## Disclaimer and Documentation
+This project builds on the wonderful reference project by isaac hosted at https://github.com/isaac879/Pan-Tilt-Mount. It further builds on Zephyr and Micro-Ros. Note that this project is still in development so there might be things not working yet. A much more detailed explainaition of the project and its capabilities is located in the mdbook docu under [docu](./docu/src). Build it using the commands below and then open one of the html-files located in the new "book" folder:
+
+```bash
+cd docu
+mdbook build
+```
 
 ## Zephyr Setup
 Get a working version of Zephyr 4.2 and the sdk-0.16.9-rc3 using the following part of the Getting Sarted guide (https://docs.zephyrproject.org/latest/develop/getting_started/index.html#get-zephyr-and-install-python-dependencies) and the technical note describing getting older versions (https://www.zephyrproject.org/managing-multiple-versions-of-the-zephyr-rtos/). 
