@@ -16,7 +16,7 @@ Note that some links will only work in the html-version of this documentation.
 
 <div id="assembly" align="center">
   <img src="./images/LaserArm_Assembled.jpeg" alt="Assembled Camera and Laser pointer" width="70%">
-  <p><em>Figure 1: Assembled System allowing pan and tilt movement combined with sliding featureing a camera slot and laser pointer.</em></p>
+  <p><em>Figure 1: Assembled System allowing roll and tilt movement combined with sliding featureing a camera slot and laser pointer.</em></p>
 </div>
 
 # References

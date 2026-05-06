@@ -1,15 +1,15 @@
 # Application Code
-This chapter aims to explain the most relevant components of a zephyr project and how to connect it to microros. Further, it will explain the most relevant parts of the application firmware that runs on the ESP32 and what the desired functionality is. It does not provide a full picture of the source code but rather states the ideas behind it.
+This chapter aims to explain the most relevant components of a Zephyr project and how to connect it to Micro-Ros. Further, it will explain the most relevant parts of the application firmware that runs on the ESP32 and what the desired functionality is. It does not provide a full picture of the source code but rather states the ideas behind it.
 
-## Zephyr project structure
-The application itself builds on the separated micro-ros module struture for zephyr development found [here](https://github.com/micro-ROS/micro_ros_zephyr_module). It features the correct setup of microros functionality within a zephyr application but allows to use zephyr's rich building tool west to build and flash your applications on the microcontroller. 
+## Zephyr Project Structure
+The application itself builds on the separated Micro-Ros module struture for Zephyr development found at <a href="https://github.com/micro-ROS/micro_ros_zephyr_module">https://github.com/micro-ROS/ micro_ros_zephyr_module </a>. It features the correct setup of Micro-Ros functionality within a Zephyr application but allows to use Zephyr's rich building tool west to build and flash your applications on the microcontroller. 
 
-Each zephyr application needs the following files:
+Each Zephyr application needs the following files:
 - src/main.c
 - app.overlay (can be named differntly if explicitly specified in the build command, this name is looked for by default) 
 - prj.conf 
 
-These three files activate and control hardware on your microcontroller. The prj.conf file defines relevant parameters like stack-sizes but also loads and activates relevant hardware libraries and functionality. For example ```CONFIG_COUNTER=y``` is necessary to drive the stepper motors with actual hardware timers and not software timers managed by the operating system. For further flags and paramters, look at the [source file](../../prj.conf). The app.overlay file connects certain functionality like counters and stepper drivers together and offers access to these in the main.c file. For example, the setup of the pitch stepper driver and its counter is shown below:
+The prj.conf file defines relevant parameters like stack-sizes, loads relevant libraries and activates hardware. For example ```CONFIG_COUNTER=y``` is necessary to drive the stepper motors with actual hardware timers and not software timers managed by the operating system. For further flags and paramters, look at the [prj.conf](../../prj.conf) source file. The app.overlay file connects hardware with software drivers, e.g. hardware counters and stepper drivers, and offers access to these in the main.c file. For example, the setup of the pitch stepper driver and its counter is shown below:
 ```
 &timer0 {
     status = "okay";
@@ -35,9 +35,9 @@ These three files activate and control hardware on your microcontroller. The prj
 }
 ```
 
-This setup-snippet shows how to connect GPIOs to the driver so that functions like "stepper_enable" do the job of pulling GPIO38 low and activate the pitch stepper driver. For further information, look at the [source file](../../app.overlay).
+The setup-snippet above shows how to connect GPIOs to the driver so that functions like "stepper_enable" do the job of pulling GPIO38 low and activate the pitch stepper driver. For further information, look at the [app.overlay](../../app.overlay) source file.
 
-Finally, the src/main.c file holds the typical application c-code that is executed with the standard main function and a while(1) loop. Through defined "aliases" in the app.overlay file, certain "devices" can be accessed in the main file:
+Finally, the [src/main.c](../../src/main.c) file holds the typical application c-code that is executed with the standard main function and a while(1) loop. Through defined "aliases" in the app.overlay file, certain "devices" can be accessed in the main file:
 
 ```
 # in the overlay file the alias is defined, note that "-" get translated to "_" in the c file and "_" seem to be not useable in the overlay file
@@ -54,8 +54,8 @@ const struct device *pitch_dev = DEVICE_DT_GET(DT_ALIAS(pitch_stepper));
 ```
 
 
-## Microros communication in zephyr
-As the microros agent needs a way of communicating with the microcontroller, certain flags need to be set in the prj.conf like the "CONFIG_MICROROS_TRANSPORT_SERIAL=y" which enables serial communication. In the app.overlay file, the "usb_serial" peripheral needs to be activated for the communication to work:
+## Micro-Ros Communication in Zephyr
+As the Micro-Ros agent needs a way of communicating with the microcontroller, certain flags need to be set in the prj.conf file like the "CONFIG_MICROROS_TRANSPORT_SERIAL=y" which enables serial communication. In the app.overlay file, the "usb_serial" peripheral needs to be activated for the communication to work:
 
 ```
 &usb_serial {
@@ -64,24 +64,24 @@ As the microros agent needs a way of communicating with the microcontroller, cer
 };
 ```
 
-As this is a special serial node that has its own physical usb-port on the ESP32S3 devkitC, we need to change the node name in the microros library file "micro_ros_zephyr_module/modules/libmicroros/microros_transports/ serial/microros_transports.c":
+As this is a special serial node that has its own physical usb-port on the ESP32S3 devkitC and is not standard, we need to change the transport-node name in the Micro-Ros library file "micro_ros_zephyr_module/modules/libmicroros /microros_transports/serial/microros_transports.c":
 
 ```
 // original: #define UART_NODE DT_NODELABEL(usart1)
+// adapted: 
 #define UART_NODE DT_NODELABEL(usb_serial)
 ```
 
-## main.c file structure
+## main.c
 This subsection goes over relevant parts of the main file and aims to explain them.
 
 ### Peripherals
-Besides the stepper drivers, there is a RGB led and three hall sensors that are being used as external peripherals. Each of those peripherals need to be initialized and verified to be ready prefearably before the while loop begins. The RGB Led is used to give visual feedback on what the ESP32 is doing and represents its state. The hall-sensors have pull-up resitors but pull the level Low when near the magnet. The GPIOs connected to the signal line of the hall sensors act as external interupt lines and are used in the hard homing sequence. 
+Besides the stepper drivers, there is a RGB LED and three hall sensors that are being used as external peripherals. Each of those peripherals need to be initialized and verified to be ready preferably before the while loop begins. The RGB LED is used to give visual feedback on what the ESP32 is doing and represents its state. The hall sensors have pull-up resitors but pull the level Low when near the magnet. The GPIOs connected to the signal line of the hall sensors act as external interupt lines and are used in the hard homing sequence discusssed further below. 
 
 ### Threads
-The application runs two threads that interact via one another by setting the system state and a command-pending-flag. The "main"-thread contains the while-loop of the main function. It runs the microros-functionality and manages the subscription to the \EPS32_Command topic as well as the publication of the feedback to the \ESP32_Feedback topic. Some relevant parts of the source code are listed below:
+The application runs two threads that interact via one another by setting the system state and a command-pending flag. The "main"-thread contains the while-loop of the main function. It runs the Micro-Ros-functionality and manages the subscription to the \EPS32_Command topic as well as the publication of the feedback to the \ESP32_Feedback topic. Some relevant parts of the source code are listed below:
 
 ```c
-
 int main(void){
 	... // initialize peripherals, set system state
 	
@@ -145,9 +145,9 @@ int main(void){
 	return 0;
 }
 ```
-The feedback-publication has a period of 1 second so far and publishes the current step positions, as well as the system state and stepper configuration, the exact structure can be reviewed in [Topics and messages](./tops_mes.md)
+The feedback-publication has a period of one second so far and publishes the current step positions, as well as the system state and stepper configuration, the exact structure can be reviewed in [Topics and messages](./tops_mes.md)
 
-The "command_callback" is called as soon as a command is received on the \ESP32_Command topic but note that the system must be in the "READY" state, otherwise the command is ignored. Further, it sets the command-pending-flag that is relevant in the second thread, the command-thread:
+The "command_callback" is called as soon as a command is received on the \ESP32_Command topic but note that the system must be in the "READY" state, otherwise the command is ignored. Further, it sets the command-pending flag that is relevant in the second thread, the command-thread:
 ```c
 void command_callback(const void *msgin){	// handles subscription to new incoming command
 	const vermin_collector_ros_msgs__msg__Command *msg = msgin;
@@ -170,7 +170,7 @@ void command_thread_entry(void *arg_1, void *arg_2, void *arg_3){
 
 	while(1){
 		if (command_pending) {
-			// command_pending = false; // done in routines
+			// command_pending = false; // done in handlers
 			switch (active_command_msg.command_type){
 			case vermin_collector_ros_msgs__msg__Command__SETUP:
 				handle_setup();
@@ -196,14 +196,14 @@ void command_thread_entry(void *arg_1, void *arg_2, void *arg_3){
 	}
 }
 ```
-Within the handle-xy functions, the fitting system-state, as described below, is set and the respective function acts accordingly.
+Within the handler functions, the fitting system state, as described below, is set and the respective function acts accordingly.
 
 ### System states
-The ESP32 can be in the following states that match the Feedback-message state types:
-- READY -> may receive new commands, Led is white
-- CONFIGURING -> received a command of type "SETUP", Led is red, but this is usally very fast so it might not be visible
-- MOVING -> received a command of type "TARGET", led is green and steppers are moving
-- CALIBRATING -> received one of the homing commands, led is blue, can be short or longer in case of "HARD_HOMING"
+The ESP32 can be in the following states that match the Feedback message state types:
+- READY -> may receive new commands, LED is white
+- CONFIGURING -> received a command of type "SETUP", LED is red, but this is usally very fast so it might not be visible
+- MOVING -> received a command of type "TARGET", LED is green and steppers are moving
+- CALIBRATING -> received one of the homing commands, LED is blue, can be short or longer in case of "HARD_HOMING"
 
 In the ready state, ESP32 should receive new commands and act accordingly. Use the Feedback state to wait for this case and send commands only then. Otherwise, they are ignored.
 
@@ -241,12 +241,12 @@ void handle_target(vermin_collector_ros_msgs__msg__Command *cmd){
 
 In any case, the stepper drives to a simple position given by the step goals. Then, depending on the star_diameter value, it either executes a star pattern, already described in [Topics and messages](./tops_mes.md) and visualized in [Figure 3](#patterns), or if the scan_limit is greater than zero, a scanning movement also visualized in [Figure 3](#patterns). Note that the star-pattern takes precedence over the scan-limit if provided (= having a value larger than zero).
 
-From the Ros-Master perspective, the followng scenearios should trigger the respecive chain of execution:
-- getting data = scanning: Robot may be moving or not. Calculate a fixed array of (absolute) positions that should be visited along the path where data is accumulated continiously.Send position goals one by one to the ESP32 and provide a scan-limit to get more data from each position. Always wait for "READY" state before sending the next position. Robot speed needs to match the execution speed properly.
+From the Ros-Master perspective, the followng scenarios should trigger the respecive chain of execution:
+- getting data = scanning: Robot may be moving or not. Calculate a fixed array of (absolute) positions that should be visited along the path where data is accumulated continiously. Send position goals one by one to the ESP32 and provide a scan-limit to get more data from each position. Always wait for the "READY" state before sending the next position. Robot speed needs to match the execution speed properly. Note that even the same position-goals may be sent continiously together with a scan-limit to achieve continious scanning but the "READY" state should be waited for nevertheless in between commands.
 - Eliminating eggs/vermin: depending on the goal-size, a simple-target may suffice or a star-pattern needs to be executed. In the simple target, the laser will be activated for the provided time given by the "laser_duration_ms" parameter. In the star-pattern, the laser is activated throughout the execution.
 
 #### CONFIGURING State
-This state is reached as soon as a "SETUP"-type command arrives and takes only a short time. The LED getting red might not be visible. Through the command parameter "resolution" the stepper resolution can be changed for all steppers synchronously. The default is 16. Through the array-like paramters "frequency_goals" and "en_motors" the stepping frequency for each stepper may be tuned individually as well as if the motor should be on or off:
+This state is reached as soon as a "SETUP"-type command arrives and takes only a short time. The LED getting red might not be visible. Through the command parameter "resolution" the stepper resolution can be changed for all steppers synchronously. The default is 16. Through the array-like paramters "frequency_goals" and "en_motors" the stepping frequency for each stepper may be tuned individually and each motor may be turned on or off:
 ```c
 void handle_setup(void){
     LOG_DBG("SETUP: configuring...\n");
@@ -297,19 +297,19 @@ void handle_setup(void){
 	}
 }
 ```
-From the perspective of the ros master, the following guidelines apply:
-- change to a higher frequency depending on the preferred accuracy and speed of the respective movement. E.g. the yaw gear transmission ratio is rather large, which means reaching a position goal may take a while with a smaller frequency. 
-- If a motor gets stuck or needs to be moved manually, disable the respective motor through a setup command and a 0 at the respective position in the en_motors array. After that, the motor can be moved freely.
+From the perspective of the Ros-master, the following guidelines apply:
+- Change to a higher frequency depending on the preferred accuracy and speed of the respective movement. E.g. the yaw gear transmission ratio is rather large, which means reaching a position goal may take a while with a smaller frequency. 
+- If a motor gets stuck or needs to be moved manually, disable the respective motor through a setup command and a zero at the respective position in the en_motors array. After that, the motor can be moved freely.
 - Use the resolution provided in the Feedback or store it prior to sending a setup-change to calculate the correct absolute step goals accordingly. The full-step amounts per revolution are stated in [Mechanical Design](./mech.md) and need to be scaled using the applied resolution.
 
 
 #### CALIBRATING State
-This state is reached via three slightly different command-types. Namely the "HOMING"-, the "SOFT_HOMING"- and the "HARD_HOMING"-type. All of these have a similar agenda but reach it differently. Right after activation, the ESP32 marks the current motor positions as 0. SO if a movement is executed and then a "HOMING" command arrives, it will move the motors back to their previously set reference. The reference can be changed via "SOFT_HOMING" and "HARD_HOMING":
+This state is reached via three slightly different command-types. Namely the "HOMING"-, the "SOFT_HOMING"- and the "HARD_HOMING"-type. All of these have a similar agenda but reach it differently. Right after activation, the ESP32 marks the current motor positions as reference (zero steps). So if a movement is executed and then a "HOMING" command arrives, it will move the motors back to their previously set reference. The reference can be changed via "SOFT_HOMING" and "HARD_HOMING":
 
-- "SOFT_HOMING" should be used if the motor was ALREADY moved to a specific position that shall be the new reference. So if for example the ros-master uses a certain camera-driven homing logic, it should provide the ESP32 with step goals to reach that position and then send a "SOFT_HOMING" command to mark this position as reference. 
-- "HARD_HOMING" does not need an external reference. It uses magnets (crrently only available for pitch and yaw movement!) and hall sensors to find a certain hard-manufactured home position. The used hall sensors, see [Hardware Design](../book/hardware.html) drive the signal line low when in the range of a magnetic field. Therefore the motors move one revolution and store ESP32 saves the step-positions where the magnetic-field was entered and where it was left. After one full revolution, it moved to motor to the middle between these two positions. 
+- "SOFT_HOMING" should be used if the motor has ALREADY been moved to a specific position that shall be the new reference. So if for example the Ros-master uses a certain camera-driven homing logic, it should provide the ESP32 with step goals to reach that position and then send a "SOFT_HOMING" command to mark this position as reference. 
+- "HARD_HOMING" does not need an external reference. It uses magnets (currently only available for pitch and yaw movement!) and hall sensors to find a certain hard-manufactured home position. The used hall sensors, see [Hardware Design](../book/hardware.html) drive the signal line low when in the range of a magnetic field. Therefore the motors move one revolution and the ESP32 saves the step-positions where the magnetic-field was entered and where it was left. After one full revolution, it moves to the middle between these two positions. 
 
-Note that after the execution of both "SOFT_HOMING" and "HARD_HOMING" a new reference position has been set and that the current steps (e.g. received in the feedback-message) are reset to zero.
+Note that after the execution of both "SOFT_HOMING" and "HARD_HOMING" a new reference position has been set and that the current steps (e.g. received in the Feedback message) are reset to zero.
 
 The respective handler is given below:
 

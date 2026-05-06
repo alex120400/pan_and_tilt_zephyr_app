@@ -34,7 +34,7 @@ The RMS current for the motor can be set using a potentiometer on the driver boa
   <p><em>Figure 7: A snapshot from the original datasheet from Analog Devices stating the RMS current configuration using V_REF and a sensing resistor. The sensing resistor is populated on the driver board and has a value of 110 mOhms, which leads to the given simplifcation of the formula. </em></p>
 </div>
 
-## Schematic and Layout Design, Hall Sensor
+## Schematic and Layout Design, Hall Sensors
 Besides the simple connections of certain GPIOs of the ESP32 to the three driver boards (pitch-yaw-slide) and connections to pin headers and screw terminals, a few other blocks have been implemented which will be discussed in more detail. 
 
 The full schematic is available [here](./pdfs/schematic.pdf). For mechanical homing, three hall sensors are implemented on the assembly. These hall sensors of the type a3144 have a digital output in open-drain configuration. Note that there is a higher sensitivity to a certain direction of the magnetic field! These sensors require a pull-up resitor and a 5V supply. As the logic of the ESP32 operates in the range 0-3.3 V, the 5 V - supply is generated using a R-78E5.0-1.0 DC-DC converter and only used for the supply pins of the hall sensors. The pull-ups on the other hand are connected to the 3.3 V supply pins of the ESP32. The signal pins of the hall sensores are connected to GPIOs of the ESP32 and to pull-ups as well as capacitors to debounce the signal. The supply-block and the hall-sensor-block is shown below in [Figure 8](#supply-hall). For future updates, a pin-header with five unused GPIOs is also available, though one of these will be used to control a laser. 
@@ -47,7 +47,7 @@ The full schematic is available [here](./pdfs/schematic.pdf). For mechanical hom
 
 Further note that due to the limited number of available pins, the resolution can only be changed for all stepper motors together. On the other hand, they have individual enable GPIOs which allows the deactivation of indiviudal steppers. 
 
-The full layout is available [here](./pdfs/layout.pdf). It feautures four layers with the second and fourth layer being mostly GND-planes. It was designed to fit into the mechanical clamps prepared on the assembly. The rounded right side was intended to better fit the round opening through which the PCB has to fit to get to its final psoition. The populated board can be seen in [Figure 9](#board) below. 
+The full layout is available [here](./pdfs/layout.pdf). It feautures four layers with the second and fourth layer being mostly GND-planes. It was designed to fit into the mechanical clamps prepared on the assembly. The rounded right side was intended to better fit the round opening through which the PCB has to fit to get to its final position. The populated board can be seen in [Figure 9](#board) below. 
 
  <div id="board" align="center">
   <img src="./images/board.jpeg" alt="The populated board" width="70%">
@@ -61,9 +61,17 @@ For the slide axis, a larger NEMA motor is used: **17HE15-1504S**, allowing up t
 
 The stepper motors must be connected to the drivers as follows:  
 
-| Stepper Driver | Small Motor       | Large Motor     |
-|:--------------:|:-----------------:|:---------------:|
-| M2B            | Red               | Green           |
-| M1B            | Blue              | Red             |
-| M1A            | Green             | Blue            |
-| M2A            | Black             | Black           |
+| Stepper Driver | Small Motor       | Large Motor     | Winding |
+|:--------------:|:-----------------:|:---------------:|:-------:|
+| M2B            | Red               | Green           | B  (+)  |
+| M1B            | Blue              | Red             | B\ (-)  |
+| M1A            | Green             | Blue            | A\ (-)  |
+| M2A            | Black             | Black           | A  (+)  |
+
+On the larger motor, to achieve this connection, the cables need to be switched on the pin-header as shown in 
+
+
+ <div id="cables" align="center">
+  <img src="./images/stepper_big_pins.jpeg" alt="The changed pin-header for the large stepper motor" width="70%">
+  <p><em>Figure 10: The necessary cable-changes for the pin-header of the large stepper motor..  </em></p>
+</div>
