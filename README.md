@@ -1,11 +1,11 @@
-# micro-ROS module for Zephyr
-This module is based on the module devolpped at https://github.com/micro-ROS/micro_ros_zephyr_module/tree/humble which has been tested in Zephyr RTOS v4.0.0 (SDK 0.16.9-rc3), and v4.1.0 (SDK 0.16.9-rc3), using a docker image based on 'zephyrprojectrtos/zephyr-build:v0.26.17'.
+# Pan and Tilt mechatronical assembly
+This project is based on the Micro-Ros module for Zephyr devolpped at https://github.com/micro-ROS/micro_ros_zephyr_module/tree/humble which has been tested in Zephyr RTOS v4.0.0 (SDK 0.16.9-rc3), and v4.1.0 (SDK 0.16.9-rc3), using a docker image based on 'zephyrprojectrtos/zephyr-build:v0.26.17'.
 
 ## Purpose of the Project
 This project aims to drive a tilt-roll-slide assembly which will be deployed on a robot platform that will help in pest control. The assembly manages movement of a camera for data accumulation and also features a laser mount that can be used to terminate vermin. The prototype assembly can be seen below.
 
 <div id="assembly" align="center">
-  <img src="./images/LaserArm_Assembled.jpeg" alt="Assembled Camera and Laser pointer" width="70%">
+  <img src="./docu(src/images/LaserArm_Assembled.jpeg" alt="Assembled Camera and Laser pointer" width="70%">
   <p><em>Assembled prototype system allowing roll and tilt movement combined with sliding featureing a camera slot and laser pointer.</em></p>
 </div>
 
