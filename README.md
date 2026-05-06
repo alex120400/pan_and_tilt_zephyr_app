@@ -1,18 +1,21 @@
 # micro-ROS module for Zephyr
-
 This module is based on the module devolpped at https://github.com/micro-ROS/micro_ros_zephyr_module/tree/humble which has been tested in Zephyr RTOS v4.0.0 (SDK 0.16.9-rc3), and v4.1.0 (SDK 0.16.9-rc3), using a docker image based on 'zephyrprojectrtos/zephyr-build:v0.26.17'.
 
-
-
 ## Purpose of the Project
+This project aims to drive a tilt-roll-slide assembly which will be deployed on a robot platform that will help in pest control. The assembly manages movement of a camera for data accumulation and also features a laser mount that can be used to terminate vermin. The prototype assembly can be seen below.
 
+<div id="assembly" align="center">
+  <img src="./images/LaserArm_Assembled.jpeg" alt="Assembled Camera and Laser pointer" width="70%">
+  <p><em>Assembled prototype system allowing roll and tilt movement combined with sliding featureing a camera slot and laser pointer.</em></p>
+</div>
 
+## Disclaimer
+This project builds on the wonderful reference project by isaac hosted at https://github.com/isaac879/Pan-Tilt-Mount. It further builds on Zephyr and Micro-Ros. Note that this project is still in development so there might be things not working yet. A much more detailed explainaition of the project and its capabilities is located in the mdbook docu under [docu](./docu).
 
-
-## Zephyr setup
+## Zephyr Setup
 Get a working version of Zephyr 4.2 and the sdk-0.16.9-rc3 using the following part of the Getting Sarted guide (https://docs.zephyrproject.org/latest/develop/getting_started/index.html#get-zephyr-and-install-python-dependencies) and the technical note describing getting older versions (https://www.zephyrproject.org/managing-multiple-versions-of-the-zephyr-rtos/). 
 
-### Installation steps
+### Installation Steps
 Most relevant commands should be:
 
 ```bash
@@ -49,11 +52,16 @@ $> cd zephyr-sdk-0.16.9-rc3_linux-x86_64
 $> ./setup.sh
 ```
 
-### zephyr source code changes
-The ESP32 has no explicit top-value for its counters but uses some kind of alarm functionality instead. However, due to this, the standard counter-functionality implemented in the TMC2209 driver functions a little peculiar. Even though, it should function as the esp32-vendor has adapted its own code so that setting a top-value is redirected to implementing an alarm, the next difference is that esp32-timers do not simply start from zero once the alarm is triggered which may lead to strange behaviour and weird debug-logs on the zephyr monitor. Additionally, the stepper-source code seems to have changed a little in general, as only single spikes were encountered in the v4.2 instead of 50% duty cycles for step signals. Therefore, the source code must be adapted a little. In particular, the three files ./code_adaptions/step_dir_stepper_counter_timing.c, ./code_adaptions/step_dir_stepper_common.c and ./code_adaptions/step_dir_stepper_common.h must be placed inside zephyr_4_2/zephyr/drivers/stepper/step_dir and replace the equally named files there. Further, there were some instances, in which the timer did not start again during the execution of a movement. This was probably the case because the ISR status was reset as the last line in the esp32 counter ISR routine after the stepper callback was executed. It seems that it was only a matter of time until the interrupt would be triggered before the previous ISR execution would reach the end and tehrefore the newly set flag was cleared and now new executiin started. Therefore the flag clreaing was moved to the beginning of the ISR in the esp32 counter ISR located in /zephyr_4_2/zephyr/drivers/counter/counter_esp32_tmr.c. Therefore the euqally named file in the code_adaptions folder must replace the file there (or just move the respective line higher up in the ISR).
+### Zephyr and Micro-Ros Source Code Changes
+As the more recent stepper-features of Zephyr are relevant for the project, a newer version of Zephyr was required than the tested ones for Micro-Ros. However, the latest ones have undergone some major file-location changes which make adjustment of Micro-Ros cumbersome. A compromise was found in using Zephyr 4.1.0. It needed some minor addjustments explained in detail in the full documentation and specifically in the [zephyr chapter](./docu/src/zephyr.md). Further, as the used ESP32S3 devkitC offeres a second usb-port controlled in Zephyr via the node "usb_serial", some minor changes to some code in the [Micro-Ros library](./modules/libmicroros/microros_transports/serial/microros_transports.c) need be done as shown below:
 
+```c
+// original: #define UART_NODE DT_NODELABEL(usart1)
+// adapted: 
+#define UART_NODE DT_NODELABEL(usb_serial)
+```
 
-### Activate zephyr environment
+### Activate Zephyr Environment
 Once everything is installed, the follwoing commands should activate your environment allowing you to build and flash zephyr code onto the esp32:
 
 ```bash
@@ -64,22 +72,20 @@ source ~/zephyr_4_2/zephyr/zephyr-env.sh
 export ZEPHYR_SDK_INSTALL_DIR=~/zephyr-sdk-0.16.9-rc3
 ```
 
-### building zephyr firmware
-with a activated and sourced environemnt, building and flashing should be possible via the following commands
+### Building Zephyr Firmware
+With a activated and sourced environemnt, building and flashing should be possible via the following commands
 
 ```bash
 west build -p always -b esp32s3_devkitc/esp32s3/procpu
 west flash
 ```
 
-### monitoring zephyr os
+### Monitoring the Zephyr OS
 The log messages from the esp32 and zephyr can be monitored with the following commands using a baudrate of 115200 but the port needs to be adapted of course:
 
 ```bash
 west espressif monitor -b 115200 -p /dev/ttyACM0
 ```
-
-
 
 ## Micro ROS Setup
 
@@ -92,11 +98,11 @@ pip3 install catkin_pkg lark-parser empy colcon-common-extensions
 ```
 
 
-### Setup ros-agent
+### Setup Ros-agent
 Follow the steps described in the Quickstart and Building micro-ROS-Agent sections from https://github.com/micro-ROS/micro_ros_setup?tab=readme-ov-file#building to get a working ros-agent for the first time. Do not follow any firmware sections!
 
 
-### Start ros-agent in micro-ros workspace via (if built at least once before)
+### Start ros-agent in Micro-Ros workspace via (if built at least once before)
 ```bash
 source /opt/ros/humble/setup.bash
 cd ~/uros_ws
@@ -104,9 +110,8 @@ source install/local_setup.sh
 ros2 run micro_ros_agent micro_ros_agent serial --dev /dev/ttyACM1 -b 460800
 ```
 
-
 ## ROS2 setup
-to interact with the micro-ros agent via ros2, the vermin_collector_ros_msgs package needs to be built there too (ros2 installation required, change "humble" against your respective version):
+to interact with the micro-ros agent via ROS2, the vermin_collector_ros_msgs package needs to be built there too (ROS2 installation required, change "humble" against your respective version):
 
 ```bash
 source /opt/ros/humble/setup.bash
@@ -123,7 +128,7 @@ ros2 interface show vermin_collector_ros_msgs/msg/Feedback
 
 ```
 
-Send a command
+A command can be sent with the following exemplary lines (turns the pitch motor to one motor-revolution at 16 microsteps if it was at step 0 before) but note that without the specifier "--once" the command gets sent repeatedly in 1 second intervals:
 ```bash
 ros2 topic pub --once /ESP32_Command vermin_collector_ros_msgs/msg/Command "{
   command_type: 1,
@@ -137,14 +142,12 @@ ros2 topic pub --once /ESP32_Command vermin_collector_ros_msgs/msg/Command "{
 }"
 ```
 
-Listen to feedback
+Listen to feedback by using the following lines:
 ```bash
 ros2 topic echo /ESP32_Feedback
 ```
 
-
 ## License
-
 This repository is open-sourced under the Apache-2.0 license. See the [LICENSE](LICENSE) file for details.
 
 For a list of other open-source components included in ROS 2 system_modes,

@@ -66,7 +66,7 @@ As the Micro-Ros agent needs a way of communicating with the microcontroller, ce
 
 As this is a special serial node that has its own physical usb-port on the ESP32S3 devkitC and is not standard, we need to change the transport-node name in the Micro-Ros library file "micro_ros_zephyr_module/modules/libmicroros /microros_transports/serial/microros_transports.c":
 
-```
+```c
 // original: #define UART_NODE DT_NODELABEL(usart1)
 // adapted: 
 #define UART_NODE DT_NODELABEL(usb_serial)

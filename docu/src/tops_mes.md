@@ -84,7 +84,7 @@ cd ~/ros2_ws
 source install/setup.bash
 ```
 
-A command can be sent with the following exemplary lines (turns the pitch motor to one motor-revolution at 16 microsteps if it was a step 0 before) but note that without the specifier "--once" the command gets sent repeatedly in 1 second intervals:
+A command can be sent with the following exemplary lines (turns the pitch motor to one motor-revolution at 16 microsteps if it was at step 0 before) but note that without the specifier "--once" the command gets sent repeatedly in 1 second intervals:
 ```bash
 ros2 topic pub --once /ESP32_Command vermin_collector_ros_msgs/msg/Command "{
   command_type: 1,
