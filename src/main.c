@@ -460,11 +460,14 @@ void handle_homing(homing_flag_t homing_flag){
 		// set current position as home
 		stepper_set_reference_position(steppers[PITCH_IDX].dev, 0); // new home position is reference 0
 		stepper_set_reference_position(steppers[YAW_IDX].dev, 0); // new home position is reference 0
+		stepper_set_reference_position(steppers[SLIDE_IDX].dev, 0); // new home position is reference 0
 	} else { // homing, just move to last set 0 position
 		move_savely_to(&steppers[PITCH_IDX], 0);
 		move_savely_to(&steppers[YAW_IDX], 0);
+		move_savely_to(&steppers[SLIDE_IDX], 0);
 		wait_for_movement_to_finish(&steppers[PITCH_IDX]);
 		wait_for_movement_to_finish(&steppers[YAW_IDX]);
+		wait_for_movement_to_finish(&steppers[SLIDE_IDX]);
 	}
 
 	// ret = gpio_pin_interrupt_configure_dt(&pitch_hall, GPIO_INT_MODE_DISABLE_ONLY); // Disable interrupt again
