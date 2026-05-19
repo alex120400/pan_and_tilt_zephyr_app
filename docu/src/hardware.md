@@ -34,6 +34,8 @@ The RMS current for the motor can be set using a potentiometer on the driver boa
   <p><em>Figure 7: A snapshot from the original datasheet from Analog Devices stating the RMS current configuration using V_REF and a sensing resistor. The sensing resistor is populated on the driver board and has a value of 110 mOhms, which leads to the given simplifcation of the formula. </em></p>
 </div>
 
+Note that ordered drivers from amazon may be faulty and should be checked prior to using them by supplying 3.3 V to all the logic pins like MS1 and MS2 and as well as DIR and 0 V to the enable pin. It happened before that some drivers pulled over 100 mA of current through the logic pins which killed one of the used ESP32 boards. 
+
 ## Schematic and Layout Design, Hall Sensors
 Besides the simple connections of certain GPIOs of the ESP32 to the three driver boards (pitch-yaw-slide) and connections to pin headers and screw terminals, a few other blocks have been implemented which will be discussed in more detail. 
 
@@ -54,7 +56,7 @@ The full layout is available [here](./pdfs/layout.pdf). It feautures four layers
   <p><em>Figure 9: The populated final PCB. Note that the driver boards and the ESP32 are stacked on the board using pin-headers. Therefore, there was some room available below the ESP32, so the DC-DC converter aswell as some capacitors and resitors have been placed there.  </em></p>
 </div>
 
-## Stepper Motors ToDo : Check actual cables and maximum currents
+## Stepper Motors
 	
 For the pitch and yaw axes, smaller NEMA motors are used: **17HS08-1004S**, allowing up to 1A of phase current.  
 For the slide axis, a larger NEMA motor is used: **17HE15-1504S**, allowing up to 1.5A of phase current.  

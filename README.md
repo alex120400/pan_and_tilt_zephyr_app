@@ -152,6 +152,14 @@ Listen to feedback by using the following lines:
 ros2 topic echo /ESP32_Feedback
 ```
 
+## Troubleshooting
+Note that ordered TMC2209 drivers from amazon may be faulty and should be checked prior to using them by supplying 3.3 V to all the logic pins like MS1 and MS2 and as well as DIR and 0 V to the enable pin. It happened before that some drivers pulled over 100 mA of current through the logic pins which killed one of the used ESP32 boards. 
+
+Always check the wiring of the stepper motors and if the coils are exposed as proposed. 
+
+If the ESP32 does not act as commanded, check if the Feedback publisher is still active.
+
+
 ## License
 This repository is open-sourced under the Apache-2.0 license. See the [LICENSE](LICENSE) file for details.
 
