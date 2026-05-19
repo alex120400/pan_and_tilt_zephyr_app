@@ -52,13 +52,13 @@ west update
 
 # get sdk 0.16.9-rc3
 wget https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v0.19.9-rc3/zephyr-sdk-0.16.9-rc3_linux-x86_64.tar.gz
-$> tar xzvf zephyr-sdk-0.16.9-rc3_linux-x86_64.tar.gz
-$> cd zephyr-sdk-0.16.9-rc3_linux-x86_64
-$> ./setup.sh
+tar xzvf zephyr-sdk-0.16.9-rc3_linux-x86_64.tar.gz
+cd zephyr-sdk-0.16.9-rc3_linux-x86_64
+./setup.sh
 ```
 
 ### Zephyr and Micro-Ros Source Code Changes
-As the more recent stepper-features of Zephyr are relevant for the project, a newer version of Zephyr was required than the tested ones for Micro-Ros. However, the latest ones have undergone some major file-location changes which make adjustment of Micro-Ros cumbersome. A compromise was found in using Zephyr 4.1.0. It needed some minor addjustments explained in detail in the full documentation and specifically in the [zephyr chapter](./docu/src/zephyr.md). Further, as the used ESP32S3 devkitC offeres a second usb-port controlled in Zephyr via the node "usb_serial", some minor changes to some code in the [Micro-Ros library](./modules/libmicroros/microros_transports/serial/microros_transports.c) need be done as shown below:
+As the more recent stepper-features of Zephyr are relevant for the project, a newer version of Zephyr was required than the tested ones for Micro-Ros. However, the latest ones have undergone some major file-location changes which make adjustment of Micro-Ros cumbersome. A compromise was found in using Zephyr 4.2.0. It needed some minor addjustments explained in detail in the full documentation and specifically in the [zephyr chapter](./docu/src/zephyr.md). Further, as the used ESP32S3 devkitC offeres a second usb-port controlled in Zephyr via the node "usb_serial", some minor changes to some code in the [Micro-Ros library](./modules/libmicroros/microros_transports/serial/microros_transports.c) need be done as shown below:
 
 ```c
 // original: #define UART_NODE DT_NODELABEL(usart1)
