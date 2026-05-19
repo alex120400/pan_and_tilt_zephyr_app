@@ -130,6 +130,11 @@ static struct led_rgb colors[] = {
 };
 
 
+/* #################################### Laser LED preparation step #################################### */
+static const struct gpio_dt_spec laser_anode = GPIO_DT_SPEC_GET(DT_ALIAS(laser_led_anode), gpios);
+static const struct gpio_dt_spec laser_kathode = GPIO_DT_SPEC_GET(DT_ALIAS(laser_led_kathode), gpios);
+
+
 /* #################################### Hall Sensor preparation step #################################### */
 static const struct gpio_dt_spec pitch_hall = GPIO_DT_SPEC_GET(DT_ALIAS(pitch_hall), gpios);
 static struct gpio_callback pitch_hall_cb_data;
@@ -229,6 +234,29 @@ void init_led(void){
 	if (led_strip_update_rgb(strip, &colors[CONFIGURING_IDX], STRIP_NUM_PIXELS) != 0) {
     LOG_ERR("LED update failed");
 	}
+}
+
+void init_laser(void){
+	int ret;
+
+	ret = gpio_is_ready_dt(&laser_anode) && gpio_is_ready_dt(&laser_kathode);
+	if (!ret) {
+		LOG_ERR("Laser LED gpios not ready!");
+		return;
+	}
+
+	ret = gpio_pin_configure_dt(&laser_anode, GPIO_OUTPUT_INACTIVE); // is active high
+	if (ret < 0) {
+		LOG_ERR("Laser LED anode init failed!");
+		return;
+	}
+
+	ret = gpio_pin_configure_dt(&laser_kathode, GPIO_OUTPUT_ACTIVE); // is active low
+	if (ret < 0) {
+		LOG_ERR("Laser LED kathode init failed!");
+		return;
+	}
+	return;
 }
 
 void init_steppers(void){
@@ -484,6 +512,37 @@ void handle_homing(homing_flag_t homing_flag){
 }
 
 
+void activate_led_for_ms_blocking(uint32_t duration_ms){
+	if (duration_ms == 0) return; // skip this if duration is zero
+
+	/* FORCE reconfiguration right before use */
+    gpio_pin_configure_dt(&laser_anode, GPIO_OUTPUT); // do not change state yet
+    gpio_pin_configure_dt(&laser_kathode, GPIO_OUTPUT_ACTIVE); // active low, make sure it is low here
+	
+	gpio_pin_set_dt(&laser_anode, 1); // logical set! anode is active high
+	LOG_DBG("Laser activated for &d ms", duration_ms);
+	k_msleep(duration_ms);
+	gpio_pin_set_dt(&laser_anode, 0);
+	return ;
+}
+
+
+void activate_led_non_blocking(){
+	/* FORCE reconfiguration right before use */
+    gpio_pin_configure_dt(&laser_anode, GPIO_OUTPUT_ACTIVE); // active high, activate led
+    gpio_pin_configure_dt(&laser_kathode, GPIO_OUTPUT_ACTIVE); // active low, make sure it is low here
+	return;
+}
+
+
+void deactivate_led_non_blocking(){
+	/* FORCE reconfiguration right before use */
+    gpio_pin_configure_dt(&laser_anode, GPIO_OUTPUT_INACTIVE); // active high, deactivate led
+    gpio_pin_configure_dt(&laser_kathode, GPIO_OUTPUT_ACTIVE); // active low, make sure it is low here
+	return;
+}
+
+
 void scan_pattern(uint32_t d){
 	/* Scan pattern looks like:
 			|
@@ -591,18 +650,22 @@ void handle_target(vermin_collector_ros_msgs__msg__Command *cmd){
 	}
 
     if (local_cmd.star_diameter == 0) {
-        simple_target(&local_cmd);
-		// activate laser?
+        simple_target(&local_cmd); // will apply scan if needed
+		// activate laser later once movement is finished
     } else {
 		local_cmd.scan_limit = 0;
+		local_cmd.laser_duration_ms = 0; // reset to avoid further laser activation below
 		simple_target(&local_cmd); // move to goal
-		// activate laser?
+		// activate laser indefinitely
+		activate_led_non_blocking();
         star_pattern(&local_cmd); // execute star
+		deactivate_led_non_blocking();
     }
 
 	wait_for_movement_to_finish(&steppers[PITCH_IDX]); // wait till remaining movement is finished, before changing system state
 	wait_for_movement_to_finish(&steppers[YAW_IDX]);
 	wait_for_movement_to_finish(&steppers[SLIDE_IDX]);
+	activate_led_for_ms_blocking(local_cmd.laser_duration_ms);
 
     system_state = STATE_READY;
 	if (led_strip_update_rgb(strip, &colors[READY_IDX], STRIP_NUM_PIXELS) != 0) {

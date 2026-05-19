@@ -84,7 +84,22 @@
 		pitch-hall = &hall1;
 		yaw-hall = &hall2;
 		slide-hall = &hall3;
+		laser-led-anode = &anode;
+		laser-led-kathode = &kathode;
 
+	};
+
+	leds {
+		compatible = "gpio-leds";
+		anode: led_0 {
+			gpios = <&gpio0 16 GPIO_ACTIVE_HIGH>;
+			label = "LED Laser Anode";
+		};
+
+		kathode: led_1 {
+			gpios = <&gpio0 15 GPIO_ACTIVE_LOW>; // setting it drives pin low!
+			label = "LED Laser Kathode";
+		};
 	};
 
 	buttons {
